@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/ong_mvp?createDatabaseIfNotExist=true&serverTimezone=UTC}
+    username: ${DB_USER:ong_app}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: alpha
+    tagsSorter: alpha
+    displayRequestDuration: true
+
+logging:
+  file:
+    name: ${LOG_FILE:logs/ong-api.log}
+  level:
+    br.org.social: INFO
