@@ -1,0 +1,60 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ong_mvp
+      MYSQL_USER: ong_app
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no arquivo .env}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Defina DB_ROOT_PASSWORD no arquivo .env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/ong_mvp?serverTimezone=UTC
+      DB_USER: ong_app
+      DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no arquivo .env}
+      SERVER_ADDRESS: 0.0.0.0
+      APP_UPLOAD_DIR: /app/uploads
+      LOG_FILE: /app/logs/ong-api.log
+    depends_on:
+      mysql:
+        condition: service_healthy
+    expose:
+      - "8080"
+    volumes:
+      - uploads:/app/uploads
+      - app_logs:/app/logs
+
+  web:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?Defina DOMAIN no arquivo .env}
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  mysql_data:
+  uploads:
+  app_logs:
+  caddy_data:
+  caddy_config:

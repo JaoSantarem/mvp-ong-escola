@@ -8,6 +8,9 @@ spring:
       ddl-auto: update
     open-in-view: false
 
+server:
+  address: 127.0.0.1
+
 springdoc:
   api-docs:
     path: /v3/api-docs
