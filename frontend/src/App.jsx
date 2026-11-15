@@ -1,10 +1,16 @@
-import { apiFetch } from "./api.js";
+import { apiFetch } from "./services/api.js";
 import React, { useEffect, useState } from "react";
-import { createRoot } from "react-dom/client";
-import AuthScreen from "./AuthScreen.jsx";
-import { Dashboard, WorkshopList, People, Team, Projects, Finance, Classroom } from "./views.jsx";
-import "./style.css";
-function App() {
+import AuthScreen from "./pages/AuthPage.jsx";
+import {
+  Dashboard,
+  WorkshopList,
+  People,
+  Team,
+  Projects,
+  Finance,
+  Classroom,
+} from "./pages/index.js";
+export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoChecking, setDemoChecking] = useState(true),
     [demoMode, setDemoMode] = useState(false);
@@ -431,4 +437,3 @@ function App() {
     </div>
   );
 }
-createRoot(document.getElementById("root")).render(<App />);
