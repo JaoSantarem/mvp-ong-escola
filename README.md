@@ -57,3 +57,8 @@ Comandos úteis: `docker compose -f docker-compose.prod.yml logs -f`, `docker co
 
 A prestação de contas está estruturada para controle operacional. Modelos específicos por edital/instrumento, exportação PDF/XLSX, conciliação bancária e gestão documental avançada ainda não fazem parte deste corte. Para produção, configure armazenamento persistente e seguro, HTTPS, gestão de segredos, backups e política de retenção.
 
+## Formatação do código
+
+O Java usa quatro espaços de indentação; React, JavaScript, CSS e configurações usam dois. Os arquivos seguem um limite preferencial de 100 colunas.
+
+Na raiz do projeto, execute npm install para instalar as ferramentas de desenvolvimento, npm run format para formatar e npm run format:check para conferir o padrão. No editor, use a extensão Prettier e habilite a formatação ao salvar.

@@ -1,0 +1,9 @@
+**/node_modules/
+**/dist/
+**/target/
+**/.idea/
+**/logs/
+**/uploads/
+**/package-lock.json
+.env
+.env.*

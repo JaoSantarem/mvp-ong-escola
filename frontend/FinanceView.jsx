@@ -1,30 +1,843 @@
 import { apiFetch } from "./api.js";
-import React,{useEffect,useRef,useState} from 'react';
-const money=n=>Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-const mask=v=>{const d=v.replace(/\D/g,'').slice(0,15);return d?money(Number(d)/100):''};
-const numeric=v=>Number(v.replace(/\D/g,''))/100;
-const types={DONATION:'Doação',EXPENSE:'Despesa',CASH_IN:'Entrada de caixa'};
-const statuses={RECEIVED:'Recebida',PENDING:'Pendente',APPROVED:'Aprovada',REJECTED:'Recusada'};
-const day=v=>v?v.split('-').reverse().join('/'):'—';
-const fields={date:'Data',type:'Tipo',description:'Descrição',source:'Doador / origem',project:'Projeto',workshop:'Oficina',category:'Categoria',amount:'Valor',status:'Situação',reference:'Referência',observation:'Observação',approvedBy:'Aprovado / recusado por',attachments:'Anexos'};
-const filesOf=r=>[...(r.attachments||[]),...(r.legacyAttachment?[r.legacyAttachment]:[])];
-function value(r,k){return k==='date'?day(r.date):k==='type'?types[r.type]||r.type:k==='status'?statuses[r.status]||r.status:k==='amount'?money(r.amount):k==='attachments'?filesOf(r).map(f=>f.name).join(', '):r[k]||''}
-function downloadBlob(blob,name){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
-async function getFile(f){const res=await apiFetch(f.url,{headers:{Authorization:'Bearer '+sessionStorage.getItem('ong-auth')}});if(!res.ok)throw Error('Não foi possível baixar '+f.name);downloadBlob(await res.blob(),f.name)}
-function Detail({row,close,decide}){const ref=useRef(null),[error,ErrorText]=useState(''),[busy,Busy]=useState(false);useEffect(()=>{const last=document.activeElement;ref.current.showModal();return()=>last?.focus()},[]);return <dialog className="attendance-modal" ref={ref} onCancel={close} aria-labelledby="ledger-detail-title"><header><h2 id="ledger-detail-title">Detalhes do lançamento</h2><button onClick={close} aria-label="Fechar detalhes">×</button></header><dl className="ledger-details">{Object.entries(fields).filter(([k])=>k!=='attachments').map(([k,label])=><div key={k}><dt>{label}</dt><dd>{value(row,k)||'—'}</dd></div>)}</dl><h3>Anexos</h3>{filesOf(row).length?filesOf(row).map((f,i)=><p key={i}><button className="secondary" onClick={()=>getFile(f).catch(e=>ErrorText(e.message))}>Baixar {f.name}</button></p>):<p>Nenhum anexo.</p>}{error&&<p role="alert">{error}</p>}{row.type==='EXPENSE'&&row.status==='PENDING'&&<div className="ledger-actions">{['approve','reject'].map(action=><button className="secondary" disabled={busy} key={action} onClick={async()=>{Busy(true);try{await decide(row,action);close()}catch(e){ErrorText(e.message)}finally{Busy(false)}}}>{action==='approve'?'Aprovar':'Recusar'}</button>)}</div>}</dialog>}
-function ExportModal({pageCount,totalCount,onClose,onExport}){const ref=useRef(null),[scope,Scope]=useState('page');useEffect(()=>{const previous=document.activeElement;ref.current.showModal();return()=>previous?.focus()},[]);return <dialog ref={ref} className="attendance-modal export-modal" aria-labelledby="export-title" aria-describedby="export-note" onCancel={onClose}><header><h2 id="export-title">Exportar CSV</h2><button type="button" aria-label="Fechar exportação" onClick={onClose}>×</button></header><p>Quais registros você quer exportar?</p><fieldset className="export-options"><legend>Escolha o alcance da exportação</legend><label><input type="radio" name="export-scope" value="page" checked={scope==='page'} onChange={()=>Scope('page')}/><span><strong>Página atual</strong><small>{pageCount} registro(s) desta página</small></span></label><label><input type="radio" name="export-scope" value="all" checked={scope==='all'} onChange={()=>Scope('all')}/><span><strong>Tudo</strong><small>{totalCount} registro(s) encontrados</small></span></label></fieldset><p id="export-note" className="export-note">Ao escolher Tudo, serão exportados todos os registros que correspondem aos filtros aplicados, incluindo os de outras páginas.</p><div className="ledger-actions"><button type="button" className="secondary" onClick={onClose}>Cancelar</button><button type="button" className="save-attendance" onClick={()=>onExport(scope)}>Exportar</button></div></dialog>}
+import React, { useEffect, useRef, useState } from "react";
+const money = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const mask = (v) => {
+  const d = v.replace(/\D/g, "").slice(0, 15);
+  return d ? money(Number(d) / 100) : "";
+};
+const numeric = (v) => Number(v.replace(/\D/g, "")) / 100;
+const types = { DONATION: "Doação", EXPENSE: "Despesa", CASH_IN: "Entrada de caixa" };
+const statuses = {
+  RECEIVED: "Recebida",
+  PENDING: "Pendente",
+  APPROVED: "Aprovada",
+  REJECTED: "Recusada",
+};
+const day = (v) => (v ? v.split("-").reverse().join("/") : "—");
+const fields = {
+  date: "Data",
+  type: "Tipo",
+  description: "Descrição",
+  source: "Doador / origem",
+  project: "Projeto",
+  workshop: "Oficina",
+  category: "Categoria",
+  amount: "Valor",
+  status: "Situação",
+  reference: "Referência",
+  observation: "Observação",
+  approvedBy: "Aprovado / recusado por",
+  attachments: "Anexos",
+};
+const filesOf = (r) => [
+  ...(r.attachments || []),
+  ...(r.legacyAttachment ? [r.legacyAttachment] : []),
+];
+function value(r, k) {
+  return k === "date"
+    ? day(r.date)
+    : k === "type"
+      ? types[r.type] || r.type
+      : k === "status"
+        ? statuses[r.status] || r.status
+        : k === "amount"
+          ? money(r.amount)
+          : k === "attachments"
+            ? filesOf(r)
+                .map((f) => f.name)
+                .join(", ")
+            : r[k] || "";
+}
+function downloadBlob(blob, name) {
+  const u = URL.createObjectURL(blob),
+    a = document.createElement("a");
+  a.href = u;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(u), 1000);
+}
+async function getFile(f) {
+  const res = await apiFetch(f.url, {
+    headers: { Authorization: "Bearer " + sessionStorage.getItem("ong-auth") },
+  });
+  if (!res.ok) throw Error("Não foi possível baixar " + f.name);
+  downloadBlob(await res.blob(), f.name);
+}
+function Detail({ row, close, decide }) {
+  const ref = useRef(null),
+    [error, ErrorText] = useState(""),
+    [busy, Busy] = useState(false);
+  useEffect(() => {
+    const last = document.activeElement;
+    ref.current.showModal();
+    return () => last?.focus();
+  }, []);
+  return (
+    <dialog
+      className="attendance-modal"
+      ref={ref}
+      onCancel={close}
+      aria-labelledby="ledger-detail-title"
+    >
+      <header>
+        <h2 id="ledger-detail-title">Detalhes do lançamento</h2>
+        <button onClick={close} aria-label="Fechar detalhes">
+          ×
+        </button>
+      </header>
+      <dl className="ledger-details">
+        {Object.entries(fields)
+          .filter(([k]) => k !== "attachments")
+          .map(([k, label]) => (
+            <div key={k}>
+              <dt>{label}</dt>
+              <dd>{value(row, k) || "—"}</dd>
+            </div>
+          ))}
+      </dl>
+      <h3>Anexos</h3>
+      {filesOf(row).length ? (
+        filesOf(row).map((f, i) => (
+          <p key={i}>
+            <button
+              className="secondary"
+              onClick={() => getFile(f).catch((e) => ErrorText(e.message))}
+            >
+              Baixar {f.name}
+            </button>
+          </p>
+        ))
+      ) : (
+        <p>Nenhum anexo.</p>
+      )}
+      {error && <p role="alert">{error}</p>}
+      {row.type === "EXPENSE" && row.status === "PENDING" && (
+        <div className="ledger-actions">
+          {["approve", "reject"].map((action) => (
+            <button
+              className="secondary"
+              disabled={busy}
+              key={action}
+              onClick={async () => {
+                Busy(true);
+                try {
+                  await decide(row, action);
+                  close();
+                } catch (e) {
+                  ErrorText(e.message);
+                } finally {
+                  Busy(false);
+                }
+              }}
+            >
+              {action === "approve" ? "Aprovar" : "Recusar"}
+            </button>
+          ))}
+        </div>
+      )}
+    </dialog>
+  );
+}
+function ExportModal({ pageCount, totalCount, onClose, onExport }) {
+  const ref = useRef(null),
+    [scope, Scope] = useState("page");
+  useEffect(() => {
+    const previous = document.activeElement;
+    ref.current.showModal();
+    return () => previous?.focus();
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      className="attendance-modal export-modal"
+      aria-labelledby="export-title"
+      aria-describedby="export-note"
+      onCancel={onClose}
+    >
+      <header>
+        <h2 id="export-title">Exportar CSV</h2>
+        <button type="button" aria-label="Fechar exportação" onClick={onClose}>
+          ×
+        </button>
+      </header>
+      <p>Quais registros você quer exportar?</p>
+      <fieldset className="export-options">
+        <legend>Escolha o alcance da exportação</legend>
+        <label>
+          <input
+            type="radio"
+            name="export-scope"
+            value="page"
+            checked={scope === "page"}
+            onChange={() => Scope("page")}
+          />
+          <span>
+            <strong>Página atual</strong>
+            <small>{pageCount} registro(s) desta página</small>
+          </span>
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="export-scope"
+            value="all"
+            checked={scope === "all"}
+            onChange={() => Scope("all")}
+          />
+          <span>
+            <strong>Tudo</strong>
+            <small>{totalCount} registro(s) encontrados</small>
+          </span>
+        </label>
+      </fieldset>
+      <p id="export-note" className="export-note">
+        Ao escolher Tudo, serão exportados todos os registros que correspondem aos filtros
+        aplicados, incluindo os de outras páginas.
+      </p>
+      <div className="ledger-actions">
+        <button type="button" className="secondary" onClick={onClose}>
+          Cancelar
+        </button>
+        <button type="button" className="save-attendance" onClick={() => onExport(scope)}>
+          Exportar
+        </button>
+      </div>
+    </dialog>
+  );
+}
 
-const initial={type:'DONATION',description:'',source:'',projectId:'',workshopId:'',category:'',amount:'',date:'',reference:'',observation:''};
-export default function FinanceView({data,api,refresh}){
- const[summaryFrom,SummaryFrom]=useState(''),[summaryUntil,SummaryUntil]=useState('');const[exportOpen,ExportOpen]=useState(false);const[page,Page]=useState(1),[pageSize,PageSize]=useState(5);
- const [form,FormState]=useState(initial),[files,Files]=useState([]),[rows,Rows]=useState([]),[error,ErrorText]=useState(''),[notice,Notice]=useState(''),[busy,Busy]=useState(false),[loading,Loading]=useState(true),[filters,Filters]=useState({}),[from,From]=useState(''),[until,Until]=useState(''),[selectedTypes,SelectedTypes]=useState({EXPENSE:true,DONATION:true}),[fileError,FileError]=useState(''),[detail,SetDetail]=useState(null);const formRef=useRef(null);
- function addFiles(e){const picked=Array.from(e.target.files||[]);e.target.value='';const next=[...files];for(const f of picked){if(!next.some(x=>x.name===f.name&&x.size===f.size&&x.lastModified===f.lastModified))next.push(f)}if(next.some(f=>!/[.](pdf|png|jpe?g)$/i.test(f.name)||!f.size||f.size>15*1024*1024)){FileError('Use PDF, PNG ou JPG, não vazio e de até 15 MB.');return}if(next.length>5||next.reduce((n,f)=>n+f.size,0)>30*1024*1024){FileError('O limite é de 5 arquivos e 30 MB no total. Remova um anexo antes de adicionar outros.');return}Files(next);FileError('')}
- function toggleType(k){SelectedTypes(previous=>{const next={...previous,[k]:!previous[k]};return next.EXPENSE||next.DONATION?next:previous})}
- const set=(k,v)=>FormState(f=>({...f,[k]:v}));async function load(){Rows(await api('ledger'))}useEffect(()=>{load().catch(e=>ErrorText(e.message)).finally(()=>Loading(false))},[]);
- async function save(e){e.preventDefault();if(busy)return;Busy(true);ErrorText('');Notice('');let created=false;try{if(numeric(form.amount)<=0)throw Error('Informe um valor maior que zero.');if(files.length>5||files.some(f=>f.size===0||f.size>15*1024*1024)||files.reduce((n,f)=>n+f.size,0)>30*1024*1024)throw Error('Envie até 5 arquivos, de até 15 MB cada e 30 MB no total.');const body=new FormData();body.append('data',JSON.stringify({...form,amount:numeric(form.amount),projectId:form.projectId?Number(form.projectId):null,workshopId:form.type==='EXPENSE'&&form.workshopId?Number(form.workshopId):null}));files.forEach(f=>body.append('files',f));const res=await apiFetch('/api/ledger',{method:'POST',headers:{Authorization:'Bearer '+sessionStorage.getItem('ong-auth')},body});if(!res.ok){const result=await res.json().catch(()=>({}));throw Error(result.message||result.detail||'Não foi possível registrar. Confira os campos e os anexos.')}created=true;FormState(initial);Files([]);FileError('');formRef.current.reset();Notice('Lançamento registrado com sucesso.');await load();await refresh()}catch(e){ErrorText(created?'O lançamento foi registrado, mas a lista não atualizou. Atualize a página.':e.message)}finally{Busy(false)}}
- const normalize=v=>String(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();const invalidRange=from&&until&&from>until;const filtered=rows.filter(r=>!invalidRange&&selectedTypes[r.type==='EXPENSE'?'EXPENSE':'DONATION']&&(!from||r.date>=from)&&(!until||r.date<=until)&&Object.entries(filters).every(([k,v])=>!v||(k==='amount'?Math.round(Number(r.amount)*100)===Math.round(numeric(v)*100):k==='status'?r.status===v:normalize(value(r,k)).includes(normalize(v))))).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||b.id-a.id);
- const summaryInvalid=!!(summaryFrom&&summaryUntil&&summaryFrom>summaryUntil);const summaryRows=rows.filter(r=>!summaryInvalid&&(!summaryFrom||r.date>=summaryFrom)&&(!summaryUntil||r.date<=summaryUntil));const receivedCents=summaryRows.filter(r=>r.type!=='EXPENSE').reduce((n,r)=>n+Math.round(Number(r.amount)*100),0);const expenseCents=summaryRows.filter(r=>r.type==='EXPENSE'&&r.status==='APPROVED').reduce((n,r)=>n+Math.round(Number(r.amount)*100),0);const cash=(receivedCents-expenseCents)/100;const summaryValue=n=>loading||summaryInvalid?'—':money(n);
- const totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));const currentPage=Math.min(page,totalPages);const pageRows=filtered.slice((currentPage-1)*pageSize,currentPage*pageSize);useEffect(()=>{Page(1)},[filters,from,until,selectedTypes,pageSize]);useEffect(()=>{Page(p=>Math.min(p,totalPages))},[totalPages]);
- function exportCsv(scope){const exportRows=scope==='page'?pageRows:filtered;const safe=v=>'"'+String(/^[=+@\-\t\r]/.test(String(v))?"'"+v:v).replace(/"/g,'""')+'"';const csv=[Object.values(fields),...exportRows.map(r=>Object.keys(fields).map(k=>value(r,k)))].map(r=>r.map(safe).join(';')).join('\r\n');downloadBlob(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'}),scope==='page'?'lancamentos-pagina-'+currentPage+'.csv':'lancamentos-filtrados.csv');ExportOpen(false)}
- return <><div className="heading"><div><h1>Financeiro e prestação de contas</h1><p>Registre doações e despesas e acompanhe os lançamentos.</p></div></div><section className="summary-period" aria-label="Período dos indicadores"><div><strong>Resumo financeiro</strong><p>As datas abaixo atualizam apenas os quatro indicadores. Sem datas, considera todo o histórico.</p></div><div className="ledger-actions"><label>Data inicial do resumo<input type="date" value={summaryFrom} max={summaryUntil||undefined} onChange={e=>SummaryFrom(e.target.value)}/></label><label>Data final do resumo<input type="date" value={summaryUntil} min={summaryFrom||undefined} onChange={e=>SummaryUntil(e.target.value)}/></label><button className="secondary" onClick={()=>{SummaryFrom('');SummaryUntil('')}}>Todo o período</button></div>{summaryInvalid&&<p className="error" role="alert">A data final deve ser igual ou posterior à data inicial.</p>}<div className="stats summary-cards" aria-live="polite"><article><small>Total recebido</small><b>{summaryValue(receivedCents/100)}</b></article><article><small>Despesas aprovadas</small><b>{summaryValue(expenseCents/100)}</b></article><article><small>Lançamentos</small><b>{loading||summaryInvalid?'—':summaryRows.length}</b></article><article className={cash<0?'cash-card cash-negative':'cash-card'}><small>Caixa atual</small><b>{summaryValue(cash)}</b><span className="cash-caption">Recebido menos despesas aprovadas no período</span></article></div></section>{error&&<p className="error" role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}<section className="panel"><h2>Registrar lançamento</h2><form ref={formRef} className="form" onSubmit={save}><label>Tipo<select value={form.type} disabled={busy} onChange={e=>set('type',e.target.value)}><option value="DONATION">Doação</option><option value="EXPENSE">Despesa</option></select></label>{form.type==='DONATION'&&<label>Doador / origem<input maxLength={255} value={form.source} onChange={e=>set('source',e.target.value)}/></label>}<label>Projeto{form.type==='DONATION'?' (opcional)':''}<select required={form.type==='EXPENSE'} value={form.projectId} onChange={e=>set('projectId',e.target.value)}><option value="">Sem vínculo</option>{data.projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>Descrição<input required maxLength={255} value={form.description} onChange={e=>set('description',e.target.value)}/></label>{form.type==='EXPENSE'&&<><label>Oficina (opcional)<select value={form.workshopId} onChange={e=>set('workshopId',e.target.value)}><option value="">Sem vínculo</option>{data.workshops.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></label><label>Categoria<input required maxLength={255} value={form.category} onChange={e=>set('category',e.target.value)}/></label><label>Referência do documento<input maxLength={255} value={form.reference} onChange={e=>set('reference',e.target.value)}/></label></>}<label>Valor (R$)<input required inputMode="numeric" placeholder="R$ 0,00" value={form.amount} onChange={e=>set('amount',mask(e.target.value))}/></label><label>Data<input type="date" required value={form.date} onChange={e=>set('date',e.target.value)}/></label><label>Anexos (PDF, PNG ou JPG)<input type="file" multiple accept=".pdf,.png,.jpg,.jpeg" disabled={busy} onChange={addFiles}/><small>Adicione arquivos juntos ou um de cada vez. Até 5 arquivos, 15 MB por arquivo e 30 MB no total.</small><span aria-live="polite">{files.length} de 5 anexos selecionados</span>{fileError&&<span role="alert" className="error">{fileError}</span>}</label><ul className="ledger-selected-files">{files.map((f,i)=><li key={f.name+f.size+f.lastModified}><span>{f.name}<small>{(f.size/1024).toFixed(1)} KB</small></span><button type="button" disabled={busy} aria-label={"Remover anexo "+f.name} onClick={()=>{Files(files.filter((_,n)=>n!==i));FileError('')}}>Remover</button></li>)}</ul><label>Observação<textarea maxLength={5000} value={form.observation} onChange={e=>set('observation',e.target.value)}/></label><button disabled={busy}>{busy?'Registrando…':'Registrar'}</button></form></section><section className="panel"><h2>Lançamentos</h2><div className="ledger-actions"><label>Data inicial<input type="date" value={from} max={until||undefined} onChange={e=>From(e.target.value)}/></label><label>Data final<input type="date" value={until} min={from||undefined} onChange={e=>Until(e.target.value)}/></label><fieldset className="ledger-type-filter"><legend>Tipo de lançamento</legend>{[['EXPENSE','Despesa'],['DONATION','Doação']].map(([key,label])=><label key={key}><input type="checkbox" checked={selectedTypes[key]} disabled={selectedTypes[key]&&Object.values(selectedTypes).filter(Boolean).length===1} onChange={()=>toggleType(key)}/>{label}</label>)}</fieldset><button className="secondary" onClick={()=>ExportOpen(true)} disabled={loading||!!invalidRange}>Exportar CSV</button><button className="secondary" onClick={()=>{Filters({});From('');Until('');SelectedTypes({EXPENSE:true,DONATION:true})}}>Limpar filtros</button></div>{invalidRange&&<p role="alert" className="error">A data final deve ser igual ou posterior à data inicial.</p>}<details className="ledger-filter-details"><summary><span aria-hidden="true">☷</span> Filtros por campo <span className="filter-chevron" aria-hidden="true">⌄</span></summary><div className="form ledger-filters">{Object.entries(fields).filter(([k])=>!['date','type'].includes(k)).map(([k,label])=><label key={k}>{label}{k==='status'?<select value={filters[k]||''} onChange={e=>Filters({...filters,[k]:e.target.value})}><option value="">Todas as situações</option>{Object.entries(statuses).map(([id,text])=><option key={id} value={id}>{text}</option>)}</select>:<input inputMode={k==='amount'?'numeric':undefined} value={filters[k]||''} onChange={e=>Filters({...filters,[k]:k==='amount'?mask(e.target.value):e.target.value})} placeholder={k==='amount'?'R$ 0,00':'Filtrar '+label.toLowerCase()}/>}</label>)}</div></details><p aria-live="polite">{loading?'Carregando…':filtered.length+' lançamento(s)'}</p><div className="table-scroll"><table><thead><tr>{['Data','Tipo','Descrição','Projeto','Valor','Situação'].map(h=><th key={h} scope="col">{h}</th>)}</tr></thead><tbody>{pageRows.map(r=><tr key={r.type+r.id} className="ledger-clickable" onClick={()=>SetDetail(r)}><td data-label="Data">{day(r.date)}</td><td data-label="Tipo">{types[r.type]}</td><td data-label="Descrição"><button className="ledger-detail-button" onClick={e=>{e.stopPropagation();SetDetail(r)}}>{r.description}</button></td><td data-label="Projeto">{r.project||'—'}</td><td data-label="Valor">{money(r.amount)}</td><td data-label="Situação">{statuses[r.status]}</td></tr>)}</tbody></table></div>{!loading&&!filtered.length&&<p>Nenhum lançamento encontrado.</p>}<footer className="ledger-pagination-footer"><label>Registros por página<select value={pageSize} onChange={e=>PageSize(Number(e.target.value))}>{[5,10,50].map(n=><option key={n} value={n}>{n}</option>)}</select></label><span aria-live="polite">{filtered.length?`${(currentPage-1)*pageSize+1}–${Math.min(currentPage*pageSize,filtered.length)} de ${filtered.length} registros`:'0 registros'}</span><nav className="ledger-pagination" aria-label="Páginas dos lançamentos"><button type="button" disabled={currentPage===1||loading} onClick={()=>Page(currentPage-1)} aria-label="Página anterior">‹</button>{Array.from({length:totalPages},(_,i)=>i+1).filter(n=>n===1||n===totalPages||Math.abs(n-currentPage)<=1).map((n,i,visible)=><React.Fragment key={n}>{i>0&&n-visible[i-1]>1&&<span>…</span>}<button type="button" disabled={loading} aria-label={"Página "+n} aria-current={n===currentPage?'page':undefined} onClick={()=>Page(n)}>{n}</button></React.Fragment>)}<button type="button" disabled={currentPage===totalPages||loading} onClick={()=>Page(currentPage+1)} aria-label="Próxima página">›</button></nav></footer></section>{exportOpen&&<ExportModal pageCount={pageRows.length} totalCount={filtered.length} onClose={()=>ExportOpen(false)} onExport={exportCsv}/ >}{detail&&<Detail row={detail} close={()=>SetDetail(null)} decide={async(r,action)=>{await api('expenses/'+r.id+'/'+action,'POST',{});await load();await refresh()}}/>}</>
+const initial = {
+  type: "DONATION",
+  description: "",
+  source: "",
+  projectId: "",
+  workshopId: "",
+  category: "",
+  amount: "",
+  date: "",
+  reference: "",
+  observation: "",
+};
+export default function FinanceView({ data, api, refresh }) {
+  const [summaryFrom, SummaryFrom] = useState(""),
+    [summaryUntil, SummaryUntil] = useState("");
+  const [exportOpen, ExportOpen] = useState(false);
+  const [page, Page] = useState(1),
+    [pageSize, PageSize] = useState(5);
+  const [form, FormState] = useState(initial),
+    [files, Files] = useState([]),
+    [rows, Rows] = useState([]),
+    [error, ErrorText] = useState(""),
+    [notice, Notice] = useState(""),
+    [busy, Busy] = useState(false),
+    [loading, Loading] = useState(true),
+    [filters, Filters] = useState({}),
+    [from, From] = useState(""),
+    [until, Until] = useState(""),
+    [selectedTypes, SelectedTypes] = useState({ EXPENSE: true, DONATION: true }),
+    [fileError, FileError] = useState(""),
+    [detail, SetDetail] = useState(null);
+  const formRef = useRef(null);
+  function addFiles(e) {
+    const picked = Array.from(e.target.files || []);
+    e.target.value = "";
+    const next = [...files];
+    for (const f of picked) {
+      if (
+        !next.some(
+          (x) => x.name === f.name && x.size === f.size && x.lastModified === f.lastModified,
+        )
+      )
+        next.push(f);
+    }
+    if (
+      next.some((f) => !/[.](pdf|png|jpe?g)$/i.test(f.name) || !f.size || f.size > 15 * 1024 * 1024)
+    ) {
+      FileError("Use PDF, PNG ou JPG, não vazio e de até 15 MB.");
+      return;
+    }
+    if (next.length > 5 || next.reduce((n, f) => n + f.size, 0) > 30 * 1024 * 1024) {
+      FileError(
+        "O limite é de 5 arquivos e 30 MB no total. Remova um anexo antes de adicionar outros.",
+      );
+      return;
+    }
+    Files(next);
+    FileError("");
+  }
+  function toggleType(k) {
+    SelectedTypes((previous) => {
+      const next = { ...previous, [k]: !previous[k] };
+      return next.EXPENSE || next.DONATION ? next : previous;
+    });
+  }
+  const set = (k, v) => FormState((f) => ({ ...f, [k]: v }));
+  async function load() {
+    Rows(await api("ledger"));
+  }
+  useEffect(() => {
+    load()
+      .catch((e) => ErrorText(e.message))
+      .finally(() => Loading(false));
+  }, []);
+  async function save(e) {
+    e.preventDefault();
+    if (busy) return;
+    Busy(true);
+    ErrorText("");
+    Notice("");
+    let created = false;
+    try {
+      if (numeric(form.amount) <= 0) throw Error("Informe um valor maior que zero.");
+      if (
+        files.length > 5 ||
+        files.some((f) => f.size === 0 || f.size > 15 * 1024 * 1024) ||
+        files.reduce((n, f) => n + f.size, 0) > 30 * 1024 * 1024
+      )
+        throw Error("Envie até 5 arquivos, de até 15 MB cada e 30 MB no total.");
+      const body = new FormData();
+      body.append(
+        "data",
+        JSON.stringify({
+          ...form,
+          amount: numeric(form.amount),
+          projectId: form.projectId ? Number(form.projectId) : null,
+          workshopId: form.type === "EXPENSE" && form.workshopId ? Number(form.workshopId) : null,
+        }),
+      );
+      files.forEach((f) => body.append("files", f));
+      const res = await apiFetch("/api/ledger", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + sessionStorage.getItem("ong-auth") },
+        body,
+      });
+      if (!res.ok) {
+        const result = await res.json().catch(() => ({}));
+        throw Error(
+          result.message ||
+            result.detail ||
+            "Não foi possível registrar. Confira os campos e os anexos.",
+        );
+      }
+      created = true;
+      FormState(initial);
+      Files([]);
+      FileError("");
+      formRef.current.reset();
+      Notice("Lançamento registrado com sucesso.");
+      await load();
+      await refresh();
+    } catch (e) {
+      ErrorText(
+        created
+          ? "O lançamento foi registrado, mas a lista não atualizou. Atualize a página."
+          : e.message,
+      );
+    } finally {
+      Busy(false);
+    }
+  }
+  const normalize = (v) =>
+    String(v)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+  const invalidRange = from && until && from > until;
+  const filtered = rows
+    .filter(
+      (r) =>
+        !invalidRange &&
+        selectedTypes[r.type === "EXPENSE" ? "EXPENSE" : "DONATION"] &&
+        (!from || r.date >= from) &&
+        (!until || r.date <= until) &&
+        Object.entries(filters).every(
+          ([k, v]) =>
+            !v ||
+            (k === "amount"
+              ? Math.round(Number(r.amount) * 100) === Math.round(numeric(v) * 100)
+              : k === "status"
+                ? r.status === v
+                : normalize(value(r, k)).includes(normalize(v))),
+        ),
+    )
+    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id - a.id);
+  const summaryInvalid = !!(summaryFrom && summaryUntil && summaryFrom > summaryUntil);
+  const summaryRows = rows.filter(
+    (r) =>
+      !summaryInvalid &&
+      (!summaryFrom || r.date >= summaryFrom) &&
+      (!summaryUntil || r.date <= summaryUntil),
+  );
+  const receivedCents = summaryRows
+    .filter((r) => r.type !== "EXPENSE")
+    .reduce((n, r) => n + Math.round(Number(r.amount) * 100), 0);
+  const expenseCents = summaryRows
+    .filter((r) => r.type === "EXPENSE" && r.status === "APPROVED")
+    .reduce((n, r) => n + Math.round(Number(r.amount) * 100), 0);
+  const cash = (receivedCents - expenseCents) / 100;
+  const summaryValue = (n) => (loading || summaryInvalid ? "—" : money(n));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  useEffect(() => {
+    Page(1);
+  }, [filters, from, until, selectedTypes, pageSize]);
+  useEffect(() => {
+    Page((p) => Math.min(p, totalPages));
+  }, [totalPages]);
+  function exportCsv(scope) {
+    const exportRows = scope === "page" ? pageRows : filtered;
+    const safe = (v) =>
+      '"' + String(/^[=+@\-\t\r]/.test(String(v)) ? "'" + v : v).replace(/"/g, '""') + '"';
+    const csv = [
+      Object.values(fields),
+      ...exportRows.map((r) => Object.keys(fields).map((k) => value(r, k))),
+    ]
+      .map((r) => r.map(safe).join(";"))
+      .join("\r\n");
+    downloadBlob(
+      new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }),
+      scope === "page" ? "lancamentos-pagina-" + currentPage + ".csv" : "lancamentos-filtrados.csv",
+    );
+    ExportOpen(false);
+  }
+  return (
+    <>
+      <div className="heading">
+        <div>
+          <h1>Financeiro e prestação de contas</h1>
+          <p>Registre doações e despesas e acompanhe os lançamentos.</p>
+        </div>
+      </div>
+      <section className="summary-period" aria-label="Período dos indicadores">
+        <div>
+          <strong>Resumo financeiro</strong>
+          <p>
+            As datas abaixo atualizam apenas os quatro indicadores. Sem datas, considera todo o
+            histórico.
+          </p>
+        </div>
+        <div className="ledger-actions">
+          <label>
+            Data inicial do resumo
+            <input
+              type="date"
+              value={summaryFrom}
+              max={summaryUntil || undefined}
+              onChange={(e) => SummaryFrom(e.target.value)}
+            />
+          </label>
+          <label>
+            Data final do resumo
+            <input
+              type="date"
+              value={summaryUntil}
+              min={summaryFrom || undefined}
+              onChange={(e) => SummaryUntil(e.target.value)}
+            />
+          </label>
+          <button
+            className="secondary"
+            onClick={() => {
+              SummaryFrom("");
+              SummaryUntil("");
+            }}
+          >
+            Todo o período
+          </button>
+        </div>
+        {summaryInvalid && (
+          <p className="error" role="alert">
+            A data final deve ser igual ou posterior à data inicial.
+          </p>
+        )}
+        <div className="stats summary-cards" aria-live="polite">
+          <article>
+            <small>Total recebido</small>
+            <b>{summaryValue(receivedCents / 100)}</b>
+          </article>
+          <article>
+            <small>Despesas aprovadas</small>
+            <b>{summaryValue(expenseCents / 100)}</b>
+          </article>
+          <article>
+            <small>Lançamentos</small>
+            <b>{loading || summaryInvalid ? "—" : summaryRows.length}</b>
+          </article>
+          <article className={cash < 0 ? "cash-card cash-negative" : "cash-card"}>
+            <small>Caixa atual</small>
+            <b>{summaryValue(cash)}</b>
+            <span className="cash-caption">Recebido menos despesas aprovadas no período</span>
+          </article>
+        </div>
+      </section>
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+      {notice && <p role="status">{notice}</p>}
+      <section className="panel">
+        <h2>Registrar lançamento</h2>
+        <form ref={formRef} className="form" onSubmit={save}>
+          <label>
+            Tipo
+            <select value={form.type} disabled={busy} onChange={(e) => set("type", e.target.value)}>
+              <option value="DONATION">Doação</option>
+              <option value="EXPENSE">Despesa</option>
+            </select>
+          </label>
+          {form.type === "DONATION" && (
+            <label>
+              Doador / origem
+              <input
+                maxLength={255}
+                value={form.source}
+                onChange={(e) => set("source", e.target.value)}
+              />
+            </label>
+          )}
+          <label>
+            Projeto{form.type === "DONATION" ? " (opcional)" : ""}
+            <select
+              required={form.type === "EXPENSE"}
+              value={form.projectId}
+              onChange={(e) => set("projectId", e.target.value)}
+            >
+              <option value="">Sem vínculo</option>
+              {data.projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Descrição
+            <input
+              required
+              maxLength={255}
+              value={form.description}
+              onChange={(e) => set("description", e.target.value)}
+            />
+          </label>
+          {form.type === "EXPENSE" && (
+            <>
+              <label>
+                Oficina (opcional)
+                <select value={form.workshopId} onChange={(e) => set("workshopId", e.target.value)}>
+                  <option value="">Sem vínculo</option>
+                  {data.workshops.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Categoria
+                <input
+                  required
+                  maxLength={255}
+                  value={form.category}
+                  onChange={(e) => set("category", e.target.value)}
+                />
+              </label>
+              <label>
+                Referência do documento
+                <input
+                  maxLength={255}
+                  value={form.reference}
+                  onChange={(e) => set("reference", e.target.value)}
+                />
+              </label>
+            </>
+          )}
+          <label>
+            Valor (R$)
+            <input
+              required
+              inputMode="numeric"
+              placeholder="R$ 0,00"
+              value={form.amount}
+              onChange={(e) => set("amount", mask(e.target.value))}
+            />
+          </label>
+          <label>
+            Data
+            <input
+              type="date"
+              required
+              value={form.date}
+              onChange={(e) => set("date", e.target.value)}
+            />
+          </label>
+          <label>
+            Anexos (PDF, PNG ou JPG)
+            <input
+              type="file"
+              multiple
+              accept=".pdf,.png,.jpg,.jpeg"
+              disabled={busy}
+              onChange={addFiles}
+            />
+            <small>
+              Adicione arquivos juntos ou um de cada vez. Até 5 arquivos, 15 MB por arquivo e 30 MB
+              no total.
+            </small>
+            <span aria-live="polite">{files.length} de 5 anexos selecionados</span>
+            {fileError && (
+              <span role="alert" className="error">
+                {fileError}
+              </span>
+            )}
+          </label>
+          <ul className="ledger-selected-files">
+            {files.map((f, i) => (
+              <li key={f.name + f.size + f.lastModified}>
+                <span>
+                  {f.name}
+                  <small>{(f.size / 1024).toFixed(1)} KB</small>
+                </span>
+                <button
+                  type="button"
+                  disabled={busy}
+                  aria-label={"Remover anexo " + f.name}
+                  onClick={() => {
+                    Files(files.filter((_, n) => n !== i));
+                    FileError("");
+                  }}
+                >
+                  Remover
+                </button>
+              </li>
+            ))}
+          </ul>
+          <label>
+            Observação
+            <textarea
+              maxLength={5000}
+              value={form.observation}
+              onChange={(e) => set("observation", e.target.value)}
+            />
+          </label>
+          <button disabled={busy}>{busy ? "Registrando…" : "Registrar"}</button>
+        </form>
+      </section>
+      <section className="panel">
+        <h2>Lançamentos</h2>
+        <div className="ledger-actions">
+          <label>
+            Data inicial
+            <input
+              type="date"
+              value={from}
+              max={until || undefined}
+              onChange={(e) => From(e.target.value)}
+            />
+          </label>
+          <label>
+            Data final
+            <input
+              type="date"
+              value={until}
+              min={from || undefined}
+              onChange={(e) => Until(e.target.value)}
+            />
+          </label>
+          <fieldset className="ledger-type-filter">
+            <legend>Tipo de lançamento</legend>
+            {[
+              ["EXPENSE", "Despesa"],
+              ["DONATION", "Doação"],
+            ].map(([key, label]) => (
+              <label key={key}>
+                <input
+                  type="checkbox"
+                  checked={selectedTypes[key]}
+                  disabled={
+                    selectedTypes[key] && Object.values(selectedTypes).filter(Boolean).length === 1
+                  }
+                  onChange={() => toggleType(key)}
+                />
+                {label}
+              </label>
+            ))}
+          </fieldset>
+          <button
+            className="secondary"
+            onClick={() => ExportOpen(true)}
+            disabled={loading || !!invalidRange}
+          >
+            Exportar CSV
+          </button>
+          <button
+            className="secondary"
+            onClick={() => {
+              Filters({});
+              From("");
+              Until("");
+              SelectedTypes({ EXPENSE: true, DONATION: true });
+            }}
+          >
+            Limpar filtros
+          </button>
+        </div>
+        {invalidRange && (
+          <p role="alert" className="error">
+            A data final deve ser igual ou posterior à data inicial.
+          </p>
+        )}
+        <details className="ledger-filter-details">
+          <summary>
+            <span aria-hidden="true">☷</span> Filtros por campo{" "}
+            <span className="filter-chevron" aria-hidden="true">
+              ⌄
+            </span>
+          </summary>
+          <div className="form ledger-filters">
+            {Object.entries(fields)
+              .filter(([k]) => !["date", "type"].includes(k))
+              .map(([k, label]) => (
+                <label key={k}>
+                  {label}
+                  {k === "status" ? (
+                    <select
+                      value={filters[k] || ""}
+                      onChange={(e) => Filters({ ...filters, [k]: e.target.value })}
+                    >
+                      <option value="">Todas as situações</option>
+                      {Object.entries(statuses).map(([id, text]) => (
+                        <option key={id} value={id}>
+                          {text}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      inputMode={k === "amount" ? "numeric" : undefined}
+                      value={filters[k] || ""}
+                      onChange={(e) =>
+                        Filters({
+                          ...filters,
+                          [k]: k === "amount" ? mask(e.target.value) : e.target.value,
+                        })
+                      }
+                      placeholder={k === "amount" ? "R$ 0,00" : "Filtrar " + label.toLowerCase()}
+                    />
+                  )}
+                </label>
+              ))}
+          </div>
+        </details>
+        <p aria-live="polite">{loading ? "Carregando…" : filtered.length + " lançamento(s)"}</p>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                {["Data", "Tipo", "Descrição", "Projeto", "Valor", "Situação"].map((h) => (
+                  <th key={h} scope="col">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {pageRows.map((r) => (
+                <tr key={r.type + r.id} className="ledger-clickable" onClick={() => SetDetail(r)}>
+                  <td data-label="Data">{day(r.date)}</td>
+                  <td data-label="Tipo">{types[r.type]}</td>
+                  <td data-label="Descrição">
+                    <button
+                      className="ledger-detail-button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        SetDetail(r);
+                      }}
+                    >
+                      {r.description}
+                    </button>
+                  </td>
+                  <td data-label="Projeto">{r.project || "—"}</td>
+                  <td data-label="Valor">{money(r.amount)}</td>
+                  <td data-label="Situação">{statuses[r.status]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!loading && !filtered.length && <p>Nenhum lançamento encontrado.</p>}
+        <footer className="ledger-pagination-footer">
+          <label>
+            Registros por página
+            <select value={pageSize} onChange={(e) => PageSize(Number(e.target.value))}>
+              {[5, 10, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span aria-live="polite">
+            {filtered.length
+              ? `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filtered.length)} de ${filtered.length} registros`
+              : "0 registros"}
+          </span>
+          <nav className="ledger-pagination" aria-label="Páginas dos lançamentos">
+            <button
+              type="button"
+              disabled={currentPage === 1 || loading}
+              onClick={() => Page(currentPage - 1)}
+              aria-label="Página anterior"
+            >
+              ‹
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((n) => n === 1 || n === totalPages || Math.abs(n - currentPage) <= 1)
+              .map((n, i, visible) => (
+                <React.Fragment key={n}>
+                  {i > 0 && n - visible[i - 1] > 1 && <span>…</span>}
+                  <button
+                    type="button"
+                    disabled={loading}
+                    aria-label={"Página " + n}
+                    aria-current={n === currentPage ? "page" : undefined}
+                    onClick={() => Page(n)}
+                  >
+                    {n}
+                  </button>
+                </React.Fragment>
+              ))}
+            <button
+              type="button"
+              disabled={currentPage === totalPages || loading}
+              onClick={() => Page(currentPage + 1)}
+              aria-label="Próxima página"
+            >
+              ›
+            </button>
+          </nav>
+        </footer>
+      </section>
+      {exportOpen && (
+        <ExportModal
+          pageCount={pageRows.length}
+          totalCount={filtered.length}
+          onClose={() => ExportOpen(false)}
+          onExport={exportCsv}
+        />
+      )}
+      {detail && (
+        <Detail
+          row={detail}
+          close={() => SetDetail(null)}
+          decide={async (r, action) => {
+            await api("expenses/" + r.id + "/" + action, "POST", {});
+            await load();
+            await refresh();
+          }}
+        />
+      )}
+    </>
+  );
 }

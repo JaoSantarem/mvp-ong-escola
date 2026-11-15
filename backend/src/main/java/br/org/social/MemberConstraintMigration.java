@@ -1,16 +1,17 @@
 package br.org.social;
 
+import java.util.List;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
-
 @Component
 class MemberConstraintMigration implements ApplicationRunner {
-    private static final org.slf4j.Logger log =
-            org.slf4j.LoggerFactory.getLogger(MemberConstraintMigration.class);
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(
+        MemberConstraintMigration.class
+    );
 
     private final JdbcTemplate jdbc;
 
@@ -20,21 +21,28 @@ class MemberConstraintMigration implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) throws java.sql.SQLException {
-        try (var connection = java.util.Objects.requireNonNull(jdbc.getDataSource()).getConnection()) {
-            if (!"MySQL".equalsIgnoreCase(connection.getMetaData().getDatabaseProductName())) return;
+        try (
+            var connection = java.util.Objects.requireNonNull(jdbc.getDataSource()).getConnection()
+        ) {
+            if (
+                !"MySQL".equalsIgnoreCase(connection.getMetaData().getDatabaseProductName())
+            ) return;
         }
         // Older versions accidentally created unique indexes on hash and role.
         // Keep the intended unique indexes on email and login, and remove only the
         // obsolete constraints that prevent multiple users from sharing a role.
-        List<String> obsoleteIndexes = jdbc.queryForList("""
-                SELECT DISTINCT INDEX_NAME
-                FROM information_schema.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME = 'member'
-                  AND NON_UNIQUE = 0
-                  AND COLUMN_NAME IN ('hash', 'role')
-                  AND INDEX_NAME <> 'PRIMARY'
-                """, String.class);
+        List<String> obsoleteIndexes = jdbc.queryForList(
+            """
+            SELECT DISTINCT INDEX_NAME
+            FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'member'
+              AND NON_UNIQUE = 0
+              AND COLUMN_NAME IN ('hash', 'role')
+              AND INDEX_NAME <> 'PRIMARY'
+            """,
+            String.class
+        );
 
         for (String index : obsoleteIndexes) {
             String safeIndex = index.replace("`", "``");
