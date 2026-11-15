@@ -11,10 +11,10 @@ interface Orgs extends JpaRepository<Org,Long>{} interface Members extends JpaRe
 @Configuration class Sec{
  private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(Sec.class);
  @Bean PasswordEncoder encoder(){return new BCryptPasswordEncoder();}
- @Bean org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer publicSetupWithoutSecurity(){return web->web.ignoring().requestMatchers("/api/setup");}
-  @org.springframework.core.annotation.Order(2) @Bean SecurityFilterChain filter(HttpSecurity h,ApiTokens tokens)throws Exception{
+
+  @org.springframework.core.annotation.Order(2) @Bean SecurityFilterChain filter(HttpSecurity h,ApiTokens tokens,@org.springframework.beans.factory.annotation.Value("${app.cors.allowed-origins:http://localhost:5173,https://mvp-ong-escola.onrender.com}") String allowedOrigins)throws Exception{
   return h.csrf(c->c.disable())
-   .cors(c->c.configurationSource(r->{var x=new org.springframework.web.cors.CorsConfiguration();x.setAllowedOrigins(List.of("http://localhost:5173"));x.setAllowedMethods(List.of("GET","POST","PUT","PATCH","OPTIONS"));x.setAllowedHeaders(List.of("*"));return x;}))
+   .cors(c->c.configurationSource(r->{var x=new org.springframework.web.cors.CorsConfiguration();x.setAllowedOrigins(Arrays.stream(allowedOrigins.split(",")).map(String::trim).filter(s->!s.isEmpty()).toList());x.setAllowedMethods(List.of("GET","POST","PUT","PATCH","OPTIONS"));x.setAllowedHeaders(List.of("*"));return x;}))
    .sessionManagement(s->s.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
    .requestCache(c->c.disable())
    .authorizeHttpRequests(a->a.requestMatchers("/error","/api/setup","/api/auth/login","/api/auth/demo","/api/auth/password-setup/**","/api/health","/swagger-ui.html","/swagger-ui/**","/v3/api-docs/**").permitAll().anyRequest().authenticated())

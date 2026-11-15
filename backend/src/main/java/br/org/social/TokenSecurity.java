@@ -69,7 +69,7 @@ class BearerTokenFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        return path.equals("/api/auth/login") || path.startsWith("/api/auth/password-setup") || path.equals("/api/health")
+        return path.equals("/api/setup") || path.equals("/api/auth/demo") || path.equals("/api/auth/login") || path.startsWith("/api/auth/password-setup") || path.equals("/api/health")
                 || path.startsWith("/swagger-ui") || path.startsWith("/v3/api-docs");
     }
 
