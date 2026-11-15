@@ -17,7 +17,7 @@ interface Orgs extends JpaRepository<Org,Long>{} interface Members extends JpaRe
    .cors(c->c.configurationSource(r->{var x=new org.springframework.web.cors.CorsConfiguration();x.setAllowedOrigins(List.of("http://localhost:5173"));x.setAllowedMethods(List.of("GET","POST","PUT","PATCH","OPTIONS"));x.setAllowedHeaders(List.of("*"));return x;}))
    .sessionManagement(s->s.sessionCreationPolicy(org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
    .requestCache(c->c.disable())
-   .authorizeHttpRequests(a->a.requestMatchers("/error","/api/setup","/api/auth/login","/api/auth/password-setup/**","/api/health","/swagger-ui.html","/swagger-ui/**","/v3/api-docs/**").permitAll().anyRequest().authenticated())
+   .authorizeHttpRequests(a->a.requestMatchers("/error","/api/setup","/api/auth/login","/api/auth/demo","/api/auth/password-setup/**","/api/health","/swagger-ui.html","/swagger-ui/**","/v3/api-docs/**").permitAll().anyRequest().authenticated())
    .httpBasic(b->b.disable()).formLogin(f->f.disable())
    .exceptionHandling(e->e.authenticationEntryPoint((request,response,exception)->{log.warn("auth_rejected method={} path={} bearerHeaderPresent={}",request.getMethod(),request.getRequestURI(),request.getHeader("Authorization")!=null);response.setStatus(401);response.setContentType("application/json");response.setCharacterEncoding("UTF-8");response.getWriter().write("{\"error\":\"Sessão inválida ou expirada. Faça login novamente.\"}");}))
    .addFilterBefore(new BearerTokenFilter(tokens),org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)

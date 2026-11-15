@@ -25,3 +25,10 @@ logging:
     name: ${LOG_FILE:logs/ong-api.log}
   level:
     br.org.social: INFO
+
+app:
+  demo:
+    enabled: true
+
+spring.servlet.multipart.max-file-size: 15MB
+spring.servlet.multipart.max-request-size: 31MB
