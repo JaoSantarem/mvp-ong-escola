@@ -19,7 +19,10 @@ class MemberConstraintMigration implements ApplicationRunner {
     }
 
     @Override
-    public void run(ApplicationArguments args) {
+    public void run(ApplicationArguments args) throws java.sql.SQLException {
+        try (var connection = java.util.Objects.requireNonNull(jdbc.getDataSource()).getConnection()) {
+            if (!"MySQL".equalsIgnoreCase(connection.getMetaData().getDatabaseProductName())) return;
+        }
         // Older versions accidentally created unique indexes on hash and role.
         // Keep the intended unique indexes on email and login, and remove only the
         // obsolete constraints that prevent multiple users from sharing a role.

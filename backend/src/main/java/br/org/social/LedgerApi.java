@@ -3,7 +3,7 @@ import jakarta.persistence.*;
 import java.util.*;import java.math.BigDecimal;import java.time.LocalDate;import java.nio.charset.StandardCharsets;
 import org.springframework.data.jpa.repository.JpaRepository;import org.springframework.web.bind.annotation.*;import org.springframework.web.multipart.MultipartFile;import org.springframework.http.*;import org.springframework.security.core.Authentication;import org.springframework.web.server.ResponseStatusException;import org.springframework.transaction.annotation.Transactional;import com.fasterxml.jackson.databind.ObjectMapper;
 @Entity class LedgerExtra{@Id @GeneratedValue(strategy=GenerationType.IDENTITY)Long id;Long orgId;String kind;Long recordId;@Column(length=5000)String observation;}
-@Entity class LedgerAttachment{@Id @GeneratedValue(strategy=GenerationType.IDENTITY)Long id;Long orgId;String kind;Long recordId;String name;@Lob @Column(columnDefinition="LONGBLOB")byte[] content;}
+@Entity class LedgerAttachment{@Id @GeneratedValue(strategy=GenerationType.IDENTITY)Long id;Long orgId;String kind;Long recordId;String name;@org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.LONGVARBINARY) byte[] content;}
 interface LedgerExtras extends JpaRepository<LedgerExtra,Long>{List<LedgerExtra> findByOrgId(Long id);}
 interface LedgerAttachments extends JpaRepository<LedgerAttachment,Long>{List<LedgerAttachment> findByOrgId(Long id);Optional<LedgerAttachment> findByIdAndOrgId(Long id,Long org);}
 @RestController @RequestMapping("/api/ledger") class LedgerApi{
