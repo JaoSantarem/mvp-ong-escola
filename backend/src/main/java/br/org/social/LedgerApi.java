@@ -14,46 +14,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-@Entity
-class LedgerExtra {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    Long id;
-
-    Long orgId;
-    String kind;
-    Long recordId;
-
-    @Column(length = 5000)
-    String observation;
-}
-
-@Entity
-class LedgerAttachment {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    Long id;
-
-    Long orgId;
-    String kind;
-    Long recordId;
-    String name;
-
-    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.LONGVARBINARY)
-    byte[] content;
-}
-
-interface LedgerExtras extends JpaRepository<LedgerExtra, Long> {
-    List<LedgerExtra> findByOrgId(Long id);
-}
-
-interface LedgerAttachments extends JpaRepository<LedgerAttachment, Long> {
-    List<LedgerAttachment> findByOrgId(Long id);
-    Optional<LedgerAttachment> findByIdAndOrgId(Long id, Long org);
-}
-
 @RestController
 @RequestMapping("/api/ledger")
 class LedgerApi {

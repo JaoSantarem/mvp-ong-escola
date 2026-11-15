@@ -10,31 +10,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
-@Entity
-class Income {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    Long id;
-
-    @ManyToOne(optional = false)
-    Org org;
-
-    @ManyToOne
-    Project project;
-
-    String type, description, source;
-
-    @Column(precision = 19, scale = 2, nullable = false)
-    BigDecimal amount;
-
-    LocalDate receivedDate;
-}
-
-interface Incomes extends JpaRepository<Income, Long> {
-    List<Income> findByOrgIdOrderByReceivedDateDescIdDesc(Long id);
-}
-
 @RestController
 @RequestMapping("/api/incomes")
 class IncomeApi {
