@@ -22,7 +22,7 @@ public class LedgerAttachment {
     private String name;
     public Long eventId;
 
-    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.LONGVARBINARY)
+    @jakarta.persistence.Column(length = org.hibernate.Length.LONG32)
     private byte[] content;
 
     public Long getId() {

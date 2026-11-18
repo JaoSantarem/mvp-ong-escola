@@ -859,17 +859,26 @@ class AreaAndPhotosTest {
             partial,
             new MockMultipartFile("file", "teste.exe", "application/octet-stream", new byte[] { 1 })
         ).andExpect(status().isBadRequest());
+        byte[] receiptBytes = new byte[128 * 1024];
         action(
             admin,
             row,
             partial,
-            new MockMultipartFile("file", "recibo.png", "image/png", png())
+            new MockMultipartFile("file", "recibo.pdf", "application/pdf", receiptBytes)
         ).andExpect(status().isOk());
         action(admin, row, partial, null).andExpect(status().isConflict());
         row = ledgerRow(admin, "EXPENSE", id);
         assertEquals("PARTIAL", row.get("status").asText());
         assertEquals(60, row.get("openAmount").asInt());
         assertEquals(1, row.get("attachments").size());
+        mvc.perform(
+            get(row.get("attachments").get(0).get("url").asText()).header(
+                "Authorization",
+                "Bearer " + admin.token()
+            )
+        )
+            .andExpect(status().isOk())
+            .andExpect(content().bytes(receiptBytes));
         long original = row.get("revision").asLong();
         action(admin, row, Map.of("action", "CANCEL", "reason", "Teste"), null).andExpect(
             status().isConflict()
