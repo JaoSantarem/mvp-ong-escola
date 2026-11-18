@@ -43,7 +43,9 @@ public class SecurityConfig {
                             .filter(s -> !s.isEmpty())
                             .toList()
                     );
-                    x.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "OPTIONS"));
+                    x.setAllowedMethods(
+                        List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                    );
                     x.setAllowedHeaders(List.of("*"));
                     return x;
                 })

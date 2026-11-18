@@ -166,6 +166,26 @@ public class AcademicController {
     public StudentOut addStudent(@RequestBody StudentIn i, Authentication a) {
         manager(a);
         Org o = org(a);
+        validateStudent(i, o);
+        Student s = students.save(
+            new Student(o, i.name(), i.birthDate(), i.responsibleName(), i.imageConsent())
+        );
+        return new StudentOut(
+            s.getId(),
+            s.getName(),
+            s.getBirthDate(),
+            s.getResponsibleName(),
+            s.getImageConsent()
+        );
+    }
+
+    private void validateStudent(StudentIn i, Org o) {
+        if (
+            i.name() == null || i.name().isBlank() || i.name().trim().length() > 255
+        ) throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Informe um nome válido de até 255 caracteres."
+        );
         if (
             i.birthDate() != null && i.birthDate().isAfter(LocalDate.now())
         ) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Data de nascimento inválida");
@@ -185,9 +205,25 @@ public class AcademicController {
             HttpStatus.BAD_REQUEST,
             "Informe responsável para participante menor de idade"
         );
-        Student s = students.save(
-            new Student(o, i.name(), i.birthDate(), i.responsibleName(), i.imageConsent())
-        );
+    }
+
+    @PutMapping("/students/{id}")
+    public StudentOut updateStudent(
+        @PathVariable Long id,
+        @RequestBody StudentIn i,
+        Authentication a
+    ) {
+        manager(a);
+        Org o = org(a);
+        Student s = students
+            .findByIdAndOrgId(id, o.getId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        validateStudent(i, o);
+        s.setName(i.name().trim());
+        s.setBirthDate(i.birthDate());
+        s.setResponsibleName(i.responsibleName());
+        s.setImageConsent(i.imageConsent());
+        students.save(s);
         return new StudentOut(
             s.getId(),
             s.getName(),

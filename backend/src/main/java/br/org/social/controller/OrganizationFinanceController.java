@@ -151,7 +151,13 @@ public class OrganizationFinanceController {
             "email",
             m.getEmail(),
             "role",
-            m.getRole()
+            m.getRole(),
+            "id",
+            m.getId(),
+            "dayToDayAccess",
+            m.hasDayToDayAccess(),
+            "managementAccess",
+            m.hasManagementAccess()
         );
     }
 

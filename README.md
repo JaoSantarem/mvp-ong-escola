@@ -2,6 +2,10 @@
 
 Aplicação web com React/Vite, API REST em Java 17/Spring Boot e banco MySQL 8.
 
+## Entender e manter o código
+
+Comece pelo [guia de manutenção](MANUTENCAO.md), com o mapa dos arquivos, o caminho de uma ação e exemplos de alterações comuns.
+
 ## Executar localmente
 
 Requisitos: Java 17+, Maven, Node.js e Docker ativo.

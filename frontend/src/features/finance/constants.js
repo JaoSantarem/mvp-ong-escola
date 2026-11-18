@@ -9,6 +9,10 @@ export const initial = {
   date: "",
   reference: "",
   observation: "",
+  staffExpense: false,
+  participantIds: [],
+  instructorIds: [],
+  memberIds: [],
 };
 
 export const types = { DONATION: "Doação", EXPENSE: "Despesa", CASH_IN: "Entrada de caixa" };
@@ -28,6 +32,9 @@ export const fields = {
   project: "Projeto",
   workshop: "Oficina",
   category: "Categoria",
+  expenseOrigin: "Responsabilidade da despesa",
+  team: "Equipe relacionada",
+  participants: "Participantes relacionados",
   amount: "Valor",
   status: "Situação",
   reference: "Referência",

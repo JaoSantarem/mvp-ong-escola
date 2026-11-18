@@ -3,6 +3,8 @@ package br.org.social.controller;
 import br.org.social.model.Expense;
 import br.org.social.model.LedgerAttachment;
 import br.org.social.model.LedgerExtra;
+import br.org.social.model.LedgerPersonLink;
+import br.org.social.repository.*;
 import br.org.social.repository.LedgerAttachmentRepository;
 import br.org.social.repository.LedgerExtraRepository;
 import br.org.social.repository.MemberRepository;
@@ -43,6 +45,10 @@ public class LedgerController {
     final LedgerExtraRepository extras;
     final LedgerAttachmentRepository attachments;
     final ObjectMapper json;
+    final StudentRepository students;
+    final InstructorRepository instructors;
+    final MemberDirectoryRepository directory;
+    final LedgerPersonLinkRepository people;
 
     public LedgerController(
         MemberRepository m,
@@ -50,7 +56,11 @@ public class LedgerController {
         IncomeController i,
         LedgerExtraRepository e,
         LedgerAttachmentRepository f,
-        ObjectMapper j
+        ObjectMapper j,
+        StudentRepository students,
+        InstructorRepository instructors,
+        MemberDirectoryRepository directory,
+        LedgerPersonLinkRepository people
     ) {
         members = m;
         api = a;
@@ -58,6 +68,10 @@ public class LedgerController {
         extras = e;
         attachments = f;
         json = j;
+        this.students = students;
+        this.instructors = instructors;
+        this.directory = directory;
+        this.people = people;
     }
 
     public record Input(
@@ -70,11 +84,76 @@ public class LedgerController {
         Long workshopId,
         String category,
         String reference,
-        String observation
+        String observation,
+        boolean staffExpense,
+        List<Long> participantIds,
+        List<Long> instructorIds,
+        List<Long> memberIds
     ) {}
 
     public Long org(Authentication a) {
         return members.findByEmailOrLogin(a.getName(), a.getName()).orElseThrow().getOrg().getId();
+    }
+
+    @GetMapping("/people")
+    public Map<String, Object> people(Authentication a) {
+        Long o = org(a);
+        return Map.of(
+            "participants",
+            students
+                .findByOrgId(o)
+                .stream()
+                .map(p -> Map.of("id", p.getId(), "name", p.getName()))
+                .toList(),
+            "instructors",
+            instructors
+                .findByOrgId(o)
+                .stream()
+                .map(p -> Map.of("id", p.getId(), "name", p.getName()))
+                .toList(),
+            "members",
+            directory
+                .findByOrgId(o)
+                .stream()
+                .map(p ->
+                    Map.of("id", p.getId(), "name", Objects.toString(p.getName(), p.getLogin()))
+                )
+                .toList()
+        );
+    }
+
+    private List<LedgerPersonLink> personLinks(String type, List<Long> ids, Long org) {
+        if (ids == null) return List.of();
+        if (ids.size() > 200 || ids.contains(null)) throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Vínculos inválidos."
+        );
+        return ids
+            .stream()
+            .distinct()
+            .map(id -> {
+                String name = switch (type) {
+                    case "STUDENT" -> students
+                        .findByIdAndOrgId(id, org)
+                        .map(p -> p.getName())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+                    case "INSTRUCTOR" -> instructors
+                        .findByIdAndOrgId(id, org)
+                        .map(p -> p.getName())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+                    default -> directory
+                        .findByIdAndOrgId(id, org)
+                        .map(p -> Objects.toString(p.getName(), p.getLogin()))
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+                };
+                LedgerPersonLink link = new LedgerPersonLink();
+                link.orgId = org;
+                link.personId = id;
+                link.personType = type;
+                link.name = name;
+                return link;
+            })
+            .toList();
     }
 
     @PostMapping
@@ -123,6 +202,20 @@ public class LedgerController {
             HttpStatus.BAD_REQUEST,
             "Os anexos devem somar até 30 MB"
         );
+        List<LedgerPersonLink> links = new ArrayList<>();
+        if ("EXPENSE".equals(in.type())) {
+            links.addAll(personLinks("STUDENT", in.participantIds(), org(a)));
+            links.addAll(personLinks("INSTRUCTOR", in.instructorIds(), org(a)));
+            links.addAll(personLinks("MEMBER", in.memberIds(), org(a)));
+        } else if (
+            in.staffExpense() ||
+            (in.participantIds() != null && !in.participantIds().isEmpty()) ||
+            (in.instructorIds() != null && !in.instructorIds().isEmpty()) ||
+            (in.memberIds() != null && !in.memberIds().isEmpty())
+        ) throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Vínculos de pessoas e staff são exclusivos de despesas."
+        );
         Long id;
         if ("DONATION".equals(in.type())) id = income
             .add(
@@ -165,6 +258,12 @@ public class LedgerController {
         e.setKind(in.type());
         e.setRecordId(id);
         e.setObservation(in.observation());
+        e.setStaffExpense("EXPENSE".equals(in.type()) && in.staffExpense());
+        for (LedgerPersonLink link : links) {
+            link.kind = in.type();
+            link.recordId = id;
+            people.save(link);
+        }
         extras.save(e);
         for (MultipartFile f : files) {
             LedgerAttachment t = new LedgerAttachment();
@@ -197,6 +296,7 @@ public class LedgerController {
             r.put("amount", i.amount());
             r.put("date", i.receivedDate());
             r.put("project", i.projectName());
+            r.put("projectId", i.projectId());
             r.put("status", "RECEIVED");
             rows.add(r);
         }
@@ -208,6 +308,7 @@ public class LedgerController {
             r.put("amount", e.getAmount());
             r.put("date", e.getExpenseDate());
             r.put("project", e.getProject() == null ? null : e.getProject().getName());
+            r.put("projectId", e.getProject() == null ? null : e.getProject().getId());
             r.put("workshop", e.getWorkshop() == null ? null : e.getWorkshop().getName());
             r.put("category", e.getCategory());
             r.put("reference", e.getDocumentName());
@@ -226,13 +327,47 @@ public class LedgerController {
         }
         List<LedgerExtra> es = extras.findByOrgId(o);
         List<LedgerAttachment> fs = attachments.findByOrgId(o);
+        List<LedgerPersonLink> personRows = people.findByOrgId(o);
         for (Map<String, Object> r : rows) {
+            r.put("staffExpense", false);
+            r.put("expenseOrigin", "EXPENSE".equals(r.get("type")) ? "Geral" : "—");
+            var related = personRows
+                .stream()
+                .filter(p -> p.kind.equals(r.get("type")) && p.recordId.equals(r.get("id")))
+                .toList();
+            r.put(
+                "participants",
+                related
+                    .stream()
+                    .filter(p -> "STUDENT".equals(p.personType))
+                    .map(p -> p.name)
+                    .collect(java.util.stream.Collectors.joining(", "))
+            );
+            r.put(
+                "team",
+                related
+                    .stream()
+                    .filter(p -> !"STUDENT".equals(p.personType))
+                    .map(p -> p.name)
+                    .collect(java.util.stream.Collectors.joining(", "))
+            );
             es.stream()
                 .filter(
                     e -> e.getKind().equals(r.get("type")) && e.getRecordId().equals(r.get("id"))
                 )
                 .findFirst()
-                .ifPresent(e -> r.put("observation", e.getObservation()));
+                .ifPresent(e -> {
+                    r.put("observation", e.getObservation());
+                    r.put("staffExpense", e.isStaffExpense());
+                    r.put(
+                        "expenseOrigin",
+                        "EXPENSE".equals(r.get("type"))
+                            ? e.isStaffExpense()
+                                ? "Equipe (staff)"
+                                : "Geral"
+                            : "—"
+                    );
+                });
             r.put(
                 "attachments",
                 fs

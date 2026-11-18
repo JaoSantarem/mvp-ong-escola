@@ -1992,3 +1992,59 @@ td select {
   background: #edf4fc;
   border-color: #bad0eb;
 }
+
+/* Navegação por categorias e catálogo de funcionalidades. */
+[hidden] {
+  display: none !important;
+}
+.nav-category {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 12px;
+}
+.nav-category h2 {
+  margin: 8px 12px 5px;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #aebed2;
+}
+.shell .nav-category button {
+  width: 100%;
+  line-height: 1.45;
+  padding: 9px 12px;
+}
+.shell .section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid #dce3ec;
+  margin: 0 0 18px;
+}
+.shell .section-nav button {
+  background: #fff;
+  border: 1px solid #cbd6e4;
+  color: #214e83;
+  min-height: 44px;
+  padding: 10px 16px;
+  font: inherit;
+}
+.shell .section-nav button:hover {
+  background: #e8eff8;
+}
+.shell .section-nav button[aria-current="page"] {
+  background: #214e83;
+  border-color: #214e83;
+  color: #fff;
+  font-weight: 700;
+}
+.section-description {
+  color: #53647b;
+  line-height: 1.6;
+}
+@media (max-width: 600px) {
+  .shell .section-nav {
+    flex-wrap: wrap;
+  }
+}

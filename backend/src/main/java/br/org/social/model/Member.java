@@ -34,6 +34,8 @@ public class Member {
     private String login;
 
     private String hash, role;
+    private Boolean dayToDayAccess;
+    private Boolean managementAccess;
     private boolean passwordSetupRequired;
     private String setupTokenHash;
     private Instant setupTokenExpiresAt;
@@ -142,5 +144,21 @@ public class Member {
 
     public void setSetupTokenExpiresAt(Instant value) {
         this.setupTokenExpiresAt = value;
+    }
+
+    public boolean hasDayToDayAccess() {
+        return "ADMIN".equals(role) || dayToDayAccess == null || dayToDayAccess;
+    }
+
+    public boolean hasManagementAccess() {
+        return "ADMIN".equals(role) || managementAccess == null || managementAccess;
+    }
+
+    public void setDayToDayAccess(Boolean value) {
+        dayToDayAccess = value;
+    }
+
+    public void setManagementAccess(Boolean value) {
+        managementAccess = value;
     }
 }

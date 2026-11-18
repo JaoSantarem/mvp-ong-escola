@@ -24,6 +24,16 @@ public class LedgerExtra {
     @Column(length = 5000)
     private String observation;
 
+    private Boolean staffExpense;
+
+    public boolean isStaffExpense() {
+        return Boolean.TRUE.equals(staffExpense);
+    }
+
+    public void setStaffExpense(boolean value) {
+        staffExpense = value;
+    }
+
     public Long getId() {
         return id;
     }

@@ -1,10 +1,14 @@
+import { CardAction } from "../components/ui/CardAction.jsx";
+import { hasArea } from "../navigation/catalog.js";
+import { NavIcon } from "../components/ui/NavIcon.jsx";
 import React, { useEffect, useState } from "react";
 import { Heading } from "../components/ui/Heading.jsx";
 import { brl } from "../utils/formatters.js";
 import { Panel } from "../components/ui/Panel.jsx";
 import { OverviewCalendar } from "../components/calendar/OverviewCalendar.jsx";
 
-export function Dashboard({ summary: s, data, setPage, api }) {
+export function Dashboard({ summary: s, data, setPage, api, profile }) {
+  const management = hasArea(profile, "management");
   const [workshopPage, WorkshopPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(data.workshops.length / 3));
   const currentPage = Math.min(workshopPage, totalPages);
@@ -13,43 +17,81 @@ export function Dashboard({ summary: s, data, setPage, api }) {
   }, [totalPages]);
   return (
     <>
-      <Heading title="Visão geral" sub="Acompanhe as atividades e os recursos da organização." />
+      <Heading
+        title="Visão geral"
+        sub="O essencial para acompanhar o dia a dia da organização."
+        action={
+          management && (
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setPage("finance:register")}
+            >
+              + Novo lançamento
+            </button>
+          )
+        }
+      />
       <div className="stats">
         {[
-          ["Oficinas", s?.workshops || 0],
-          ["Participantes", s?.participants || 0],
-          ["Projetos", s?.projects || 0],
-          ["Despesas aprovadas", brl(s?.approvedExpenses)],
-        ].map((x) => (
-          <article>
-            <small>{x[0]}</small>
-            <b>{x[1]}</b>
-          </article>
-        ))}
-      </div>
-      <div className="columns">
-        <Panel title="Despesas aguardando aprovação">
-          {data.expenses
-            .filter((x) => x.status === "PENDING")
-            .slice(0, 5)
-            .map((x) => (
-              <div className="row">
-                <span>
-                  {x.description}
-                  <small>
-                    {x.project.name} · {x.category}
-                  </small>
-                </span>
-                <b>{brl(x.amount)}</b>
+          ["Oficinas", data.workshops.length, "workshops", "workshops", "Atividades cadastradas"],
+          ["Participantes", data.students.length, "people", "people", "Pessoas atendidas"],
+          ["Projetos", s?.projects || 0, "projects", "projects", "Iniciativas da organização"],
+          [
+            "Despesas aprovadas",
+            brl(s?.approvedExpenses),
+            "finance:summary",
+            "finance",
+            "Total no histórico",
+          ],
+        ]
+          .filter((x) => management || !["projects", "finance"].includes(x[3]))
+          .map((x) => (
+            <article key={x[0]} className="metric-card interactive-card">
+              <div className="metric-label">
+                <h2 className="metric-title">{x[0]}</h2>
+                <NavIcon name={x[3]} />
               </div>
-            ))}
-          {!data.expenses.some((x) => x.status === "PENDING") && (
-            <p>Nenhuma pendência financeira.</p>
-          )}
-          <button className="link" onClick={() => setPage("finance")}>
-            Abrir financeiro →
-          </button>
-        </Panel>
+              <b>{x[1]}</b>
+              <div className="metric-footer">
+                <span>{x[4]}</span>
+              </div>
+              <CardAction label={"Ver " + x[0].toLowerCase()} onClick={() => setPage(x[2])} />
+            </article>
+          ))}
+      </div>
+      <div className={management ? "columns" : "columns single-column"}>
+        {management && (
+          <Panel
+            title="Despesas aguardando aprovação"
+            actionLabel="Ver despesas aguardando aprovação"
+            onClick={() => setPage("finance:ledger")}
+          >
+            {data.expenses
+              .filter((x) => x.status === "PENDING")
+              .slice(0, 5)
+              .map((x) => (
+                <div className="row" key={x.id}>
+                  <span>
+                    {x.description}
+                    <small>
+                      {x.project || "Sem projeto"} · {x.category || "Sem categoria"}
+                    </small>
+                  </span>
+                  <b>{brl(x.amount)}</b>
+                </div>
+              ))}
+            {!data.expenses.some((x) => x.status === "PENDING") && (
+              <div className="clear-state">
+                <span aria-hidden="true">✓</span>
+                <div>
+                  <strong>Tudo em dia</strong>
+                  <p>Nenhuma despesa aguardando aprovação.</p>
+                </div>
+              </div>
+            )}
+          </Panel>
+        )}
         <Panel title="Oficinas">
           {data.workshops.slice((currentPage - 1) * 3, currentPage * 3).map((x) => (
             <div className="row" key={x.id}>

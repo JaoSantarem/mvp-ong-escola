@@ -79,7 +79,15 @@ public class TeamController {
         students = s;
     }
 
-    public record UserIn(String name, String login, String email) {}
+    public record UserIn(
+        String name,
+        String login,
+        String email,
+        Boolean dayToDayAccess,
+        Boolean managementAccess
+    ) {}
+
+    public record AreaAccess(boolean dayToDayAccess, boolean managementAccess) {}
 
     public record PositionIn(String name, String description) {}
 
@@ -120,6 +128,8 @@ public class TeamController {
         view.put("login", u.getLogin());
         view.put("email", u.getEmail());
         view.put("permissionRole", u.getRole());
+        view.put("dayToDayAccess", u.hasDayToDayAccess());
+        view.put("managementAccess", u.hasManagementAccess());
         view.put("positionId", u.getPosition() == null ? null : u.getPosition().getId());
         view.put("positionName", u.getPosition() == null ? null : u.getPosition().getName());
         return view;
@@ -152,6 +162,8 @@ public class TeamController {
         String setupToken = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         Member u = new Member(org(a), login, email, null, "INSTRUCTOR");
         u.setName(i.name().trim());
+        u.setDayToDayAccess(i.dayToDayAccess() == null || i.dayToDayAccess());
+        u.setManagementAccess(Boolean.TRUE.equals(i.managementAccess()));
         u.setPasswordSetupRequired(true);
         u.setSetupTokenHash(TokenSecurity.hash(setupToken));
         u.setSetupTokenExpiresAt(java.time.Instant.now().plus(java.time.Duration.ofDays(7)));
@@ -160,6 +172,28 @@ public class TeamController {
         result.put("setupToken", setupToken);
         result.put("setupTokenExpiresAt", u.getSetupTokenExpiresAt().toString());
         return result;
+    }
+
+    @PutMapping("/users/{id}/areas")
+    public Map<String, Object> updateAreas(
+        @PathVariable Long id,
+        @RequestBody AreaAccess access,
+        Authentication a
+    ) {
+        admin(a);
+        Member target = directory
+            .findByIdAndOrgId(id, org(a).getId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (
+            "ADMIN".equals(target.getRole()) &&
+            (!access.dayToDayAccess() || !access.managementAccess())
+        ) throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Administradores mantêm acesso às duas áreas."
+        );
+        target.setDayToDayAccess(access.dayToDayAccess());
+        target.setManagementAccess(access.managementAccess());
+        return userView(directory.save(target));
     }
 
     @GetMapping("/positions")
@@ -272,6 +306,19 @@ public class TeamController {
         if (
             !List.of("ADMIN", "COORDINATOR").contains(actor(a).getRole())
         ) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        validateInstructor(i);
+        Instructor instructor = instructors.save(
+            new Instructor(org(a), i.name().trim(), i.area(), i.contact())
+        );
+        return new InstructorOut(
+            instructor.getId(),
+            instructor.getName(),
+            instructor.getArea(),
+            instructor.getContact()
+        );
+    }
+
+    private void validateInstructor(InstructorIn i) {
         if (i.name() == null || i.name().isBlank()) throw new ResponseStatusException(
             HttpStatus.BAD_REQUEST,
             "Informe o nome do instrutor"
@@ -282,9 +329,25 @@ public class TeamController {
             HttpStatus.BAD_REQUEST,
             "Informe um telefone válido com DDD, por exemplo (11) 91234-5678"
         );
-        Instructor instructor = instructors.save(
-            new Instructor(org(a), i.name().trim(), i.area(), i.contact())
-        );
+    }
+
+    @PutMapping("/instructors/{id}")
+    public InstructorOut updateInstructor(
+        @PathVariable Long id,
+        @RequestBody InstructorIn i,
+        Authentication a
+    ) {
+        if (
+            !List.of("ADMIN", "COORDINATOR").contains(actor(a).getRole())
+        ) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        Instructor instructor = instructors
+            .findByIdAndOrgId(id, org(a).getId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        validateInstructor(i);
+        instructor.setName(i.name().trim());
+        instructor.setArea(i.area());
+        instructor.setContact(i.contact());
+        instructors.save(instructor);
         return new InstructorOut(
             instructor.getId(),
             instructor.getName(),
@@ -377,7 +440,7 @@ public class TeamController {
     @GetMapping(value = "/reports/expenses.csv", produces = "text/csv;charset=UTF-8")
     public org.springframework.http.ResponseEntity<String> expenseCsv(Authentication a) {
         StringBuilder csv = new StringBuilder(
-            "﻿data,projeto,fonte,categoria,descricao,valor,status,comprovante\n"
+            "ï»¿data,projeto,fonte,categoria,descricao,valor,status,comprovante\n"
         );
         for (Expense e : expenses.findByOrgId(org(a).getId())) {
             csv.append(csv(e.getExpenseDate() == null ? "" : e.getExpenseDate().toString()))

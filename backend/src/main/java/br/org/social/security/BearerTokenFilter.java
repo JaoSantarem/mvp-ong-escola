@@ -25,9 +25,17 @@ public class BearerTokenFilter extends OncePerRequestFilter {
         this.tokens = tokens;
     }
 
+    private String requestPath(HttpServletRequest request) {
+        if (!request.getServletPath().isEmpty()) return request.getServletPath();
+        return org.springframework.web.util.UriUtils.decode(
+            request.getRequestURI().substring(request.getContextPath().length()),
+            java.nio.charset.StandardCharsets.UTF_8
+        );
+    }
+
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getServletPath();
+        String path = requestPath(request);
         return (
             path.equals("/api/setup") ||
             path.equals("/api/auth/demo") ||
@@ -67,6 +75,31 @@ public class BearerTokenFilter extends OncePerRequestFilter {
         }
 
         Member member = found.get().getMember();
+        String path = requestPath(request);
+        boolean dayPath = path.matches(
+            "/api/(workshops|students|meetings|enrollments|attendance|notes)(/.*)?"
+        );
+        boolean managementPath = path.matches(
+            "/api/(projects|expenses|incomes|ledger|users|positions|reports)(/.*)?"
+        );
+        boolean instructorPath = path.matches("/api/instructors(/.*)?");
+        boolean allowed =
+            (!dayPath || member.hasDayToDayAccess()) &&
+            (!managementPath || member.hasManagementAccess());
+        if (instructorPath) allowed = "GET".equals(request.getMethod())
+            ? member.hasDayToDayAccess() || member.hasManagementAccess()
+            : member.hasManagementAccess();
+        if (!allowed) {
+            response.setStatus(403);
+            response.setContentType("application/json");
+            response.setCharacterEncoding("UTF-8");
+            response
+                .getWriter()
+                .write(
+                    "{\"error\":\"Você não tem acesso a esta área. Solicite a liberação ao administrador.\"}"
+                );
+            return;
+        }
         String username = member.getLogin() == null ? member.getEmail() : member.getLogin();
         UserDetails principal = User.withUsername(username)
             .password("")

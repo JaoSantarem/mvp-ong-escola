@@ -1,0 +1,274 @@
+/* Palette sampled from Instituto InveRso's visual identity on Atados.
+   Reference: https://www.atados.com.br/ong/instituto-inverso-323437
+   UI shades are adaptations for contrast, not an official brand manual. */
+:root {
+  --brand-red: #d33f33;
+  --brand-red-dark: #af2e25;
+  --brand-coral: #f26b55;
+  --brand-berry: #9b336e;
+  --brand-plum: #491a3a;
+  --surface: #fff;
+  --canvas: #faf7f6;
+  --ink: #362b33;
+  --muted: #75656e;
+  --line: #eadfe4;
+  --accent: var(--brand-berry);
+  --accent-dark: #762450;
+  --accent-soft: #f7edf3;
+}
+.shell > aside {
+  background: var(--brand-plum);
+  color: #fff;
+  border-right: 0;
+}
+.shell > aside .brand b {
+  color: #fff;
+}
+.shell > aside .brand small {
+  color: #dfc7d6;
+}
+.brand i {
+  background: var(--brand-red);
+  color: #fff;
+}
+.shell > aside .org {
+  background: #ffffff0b;
+  border-color: #80516e;
+  color: #fff;
+}
+.shell > aside .org small {
+  color: #dfc7d6;
+}
+.nav-category h2 {
+  color: #d8b6ca;
+}
+.shell .nav-category button {
+  color: #f0e1ea;
+}
+.shell .nav-category button:hover {
+  color: white;
+  background: #ffffff12;
+}
+.shell .nav-category button.active,
+.shell .nav-category button.active:hover {
+  color: #762450;
+  background: #fff2ed;
+  box-shadow: inset 3px 0 var(--brand-coral);
+}
+.shell > aside .logout,
+.shell > aside .demo-note {
+  color: #dfc7d6;
+  border-color: #80516e;
+}
+.demo-note > span {
+  background: var(--brand-coral);
+}
+.primary-button,
+.photo-action-primary,
+.form button,
+.panel > button,
+.cards button,
+.save-attendance,
+.auth-submit {
+  background: var(--brand-red);
+  border-color: var(--brand-red);
+  color: white;
+}
+.primary-button:hover,
+.photo-action-primary:hover,
+.form button:hover,
+.cards button:hover,
+.save-attendance:hover,
+.auth-submit:hover {
+  background: var(--brand-red-dark);
+  border-color: var(--brand-red-dark);
+}
+.primary-button:active,
+.photo-action-primary:active {
+  background: #97271f;
+}
+.form .ledger-selected-files button {
+  background: #fff;
+  color: #9c3131;
+  border-color: #e5c8c8;
+}
+.form .quiet-button {
+  background: transparent;
+  color: var(--accent);
+  border: 0;
+}
+.photo-action,
+.secondary-button,
+.secondary,
+.small,
+.edit-button {
+  color: var(--accent-dark);
+  border-color: #e1c7d6;
+  background: #fcf7fa;
+}
+.photo-action:hover,
+.secondary-button:hover,
+.secondary:hover,
+.small:hover,
+.edit-button:hover {
+  background: #f5e8f0;
+  border-color: #ba82a3;
+}
+.photo-action-primary {
+  background: var(--brand-red);
+  border-color: var(--brand-red);
+  color: #fff;
+}
+.panel h2,
+.cards article h3,
+.project-facts dd {
+  color: #4b2940;
+}
+.metric-label svg {
+  color: var(--brand-berry);
+}
+.metric-footer button {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.calendar-preview,
+.calendar-count {
+  background: #f9eae6;
+  color: #943b34;
+}
+.calendar-nav button {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid #e1c7d6;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.calendar-nav button:hover {
+  background: #efdae6;
+}
+.calendar-day-trigger:hover {
+  border-color: var(--brand-berry);
+  background: #fcf7fa;
+}
+.meeting-details,
+.export-note {
+  background: #faf0f5;
+  color: var(--ink);
+}
+.export-options label:has(input:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.export-options input,
+.ledger-type-filter input,
+.form input[type="checkbox"],
+.form-modal .expense-people input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+.ledger-detail-button,
+.ledger-pagination-footer select {
+  color: var(--accent);
+}
+.ledger-pagination-footer {
+  border-color: var(--line);
+  color: var(--muted);
+}
+.summary-period .summary-cards .cash-card {
+  background: #fbede9;
+  border-color: #edc6bc;
+}
+.form input:focus,
+.form select:focus,
+.form textarea:focus,
+.list-search input:focus,
+.auth-form input:focus,
+.auth-form select:focus {
+  outline: 2px solid var(--brand-berry);
+  outline-offset: 2px;
+  border-color: var(--brand-berry);
+  box-shadow: none;
+}
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--brand-berry);
+  outline-offset: 3px;
+}
+.shell > aside button:focus-visible {
+  outline-color: var(--brand-coral);
+}
+.profile-photo-picker {
+  border-color: #e1c7d6;
+  background: var(--accent-soft);
+}
+.profile-photo-hover {
+  background: #491a3a99;
+}
+.profile-photo-plus {
+  background: var(--brand-red);
+}
+.form-modal::backdrop {
+  background: #2c162861;
+}
+.auth-screen {
+  background: var(--canvas);
+  color: var(--ink);
+}
+.auth-intro {
+  background: var(--brand-plum);
+  color: #fff;
+  border-top: 7px solid var(--brand-coral);
+}
+.auth-brand small,
+.auth-message > p,
+.auth-foot,
+.auth-intro .eyebrow {
+  color: #e6cbdc;
+}
+.auth-mark {
+  background: var(--brand-red);
+  color: white;
+}
+.auth-points {
+  color: #fff0f7;
+}
+.auth-points i {
+  background: var(--brand-berry);
+}
+.auth-switch button,
+.auth-main .eyebrow {
+  color: var(--accent);
+}
+.auth-card h2,
+.auth-form label {
+  color: var(--ink);
+}
+@media (max-width: 800px) {
+  .mobile-bar {
+    background: var(--brand-plum);
+    color: white;
+    border-bottom-color: #80516e;
+  }
+  .mobile-bar .brand small {
+    color: #dfc7d6;
+  }
+  .menu-toggle,
+  .nav-close {
+    background: #ffffff0d;
+    color: #fff;
+    border-color: #a57b94;
+  }
+}
+.primary-button:hover,
+.photo-action-primary:hover {
+  background: var(--brand-red-dark);
+  border-color: var(--brand-red-dark);
+  color: #fff;
+}
+.form .quiet-button:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.form .ledger-selected-files button:hover {
+  background: #fff1ef;
+  color: #9c3131;
+}
