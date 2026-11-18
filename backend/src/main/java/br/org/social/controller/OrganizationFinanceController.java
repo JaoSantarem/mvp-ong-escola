@@ -44,6 +44,7 @@ public class OrganizationFinanceController {
     final ProjectRepository ps;
     final ExpenseRepository es;
     final PasswordEncoder enc;
+    final br.org.social.repository.LedgerEventRepository events;
 
     public OrganizationFinanceController(
         OrgRepository o,
@@ -51,7 +52,8 @@ public class OrganizationFinanceController {
         WorkshopRepository w,
         ProjectRepository p,
         ExpenseRepository e,
-        PasswordEncoder x
+        PasswordEncoder x,
+        br.org.social.repository.LedgerEventRepository events
     ) {
         os = o;
         ms = m;
@@ -59,6 +61,7 @@ public class OrganizationFinanceController {
         ps = p;
         es = e;
         enc = x;
+        this.events = events;
     }
 
     public record Setup(
@@ -69,7 +72,7 @@ public class OrganizationFinanceController {
         String password
     ) {}
 
-    public record WIn(String name, String description) {}
+    public record WIn(String name, String description, Boolean active) {}
 
     public record WOut(Long id, String name, String description, boolean active) {}
 
@@ -161,6 +164,16 @@ public class OrganizationFinanceController {
         );
     }
 
+    private String validName(String name) {
+        if (
+            name == null || name.isBlank() || name.length() > 255
+        ) throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Informe um nome de até 255 caracteres."
+        );
+        return name.trim();
+    }
+
     @GetMapping("/workshops")
     public List<WOut> workshops(Authentication a) {
         return ws
@@ -173,8 +186,21 @@ public class OrganizationFinanceController {
     @PostMapping("/workshops")
     public WOut addW(@RequestBody WIn i, Authentication a) {
         manager(a);
-        Workshop w = ws.save(new Workshop(tenant(a), i.name(), i.description()));
+        Workshop w = ws.save(new Workshop(tenant(a), validName(i.name()), i.description()));
         return new WOut(w.getId(), w.getName(), w.getDescription(), w.getActive());
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/workshops/{id}")
+    public WOut editWorkshop(@PathVariable Long id, @RequestBody WIn input, Authentication a) {
+        manager(a);
+        Workshop w = ws
+            .findByIdAndOrgId(id, tenant(a).getId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        w.setName(validName(input.name()));
+        w.setDescription(input.description());
+        if (input.active() != null) w.setActive(input.active());
+        ws.save(w);
+        return new WOut(id, w.getName(), w.getDescription(), w.getActive());
     }
 
     @PatchMapping("/workshops/{id}/close")
@@ -199,8 +225,24 @@ public class OrganizationFinanceController {
     @PostMapping("/projects")
     public POut addP(@RequestBody PIn i, Authentication a) {
         manager(a);
-        Project p = ps.save(new Project(tenant(a), i.name(), i.funder(), i.budget()));
+        Project p = ps.save(new Project(tenant(a), validName(i.name()), i.funder(), i.budget()));
         return new POut(p.getId(), p.getName(), p.getFunder(), p.getBudget());
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/projects/{id}")
+    public POut editProject(@PathVariable Long id, @RequestBody PIn input, Authentication a) {
+        manager(a);
+        Project project = ps
+            .findByIdAndOrgId(id, tenant(a).getId())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (
+            input.budget() == null || input.budget().signum() < 0 || input.budget().scale() > 2
+        ) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Orçamento inválido.");
+        project.setName(validName(input.name()));
+        project.setFunder(input.funder());
+        project.setBudget(input.budget());
+        ps.save(project);
+        return new POut(id, project.getName(), project.getFunder(), project.getBudget());
     }
 
     @GetMapping("/expenses")
@@ -212,9 +254,23 @@ public class OrganizationFinanceController {
     public Expense addE(@RequestBody EIn i, Authentication a) {
         manager(a);
         Org o = tenant(a);
-        Project p = ps
-            .findByIdAndOrgId(i.projectId(), o.getId())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (
+            !FinancialActions.validMoney(i.amount()) ||
+            i.expenseDate() == null ||
+            i.description() == null ||
+            i.description().isBlank() ||
+            i.category() == null ||
+            i.category().isBlank()
+        ) throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Confira a descrição, categoria, data e valor da despesa."
+        );
+        Project p =
+            i.projectId() == null
+                ? null
+                : ps
+                      .findByIdAndOrgId(i.projectId(), o.getId())
+                      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         Workshop w =
             i.workshopId() == null
                 ? null
@@ -235,6 +291,7 @@ public class OrganizationFinanceController {
         );
     }
 
+    @org.springframework.transaction.annotation.Transactional
     @PostMapping("/expenses/{id}/{decision}")
     public Expense decide(@PathVariable Long id, @PathVariable String decision, Authentication a) {
         manager(a);
@@ -242,8 +299,21 @@ public class OrganizationFinanceController {
             HttpStatus.BAD_REQUEST
         );
         Expense e = es
-            .findByIdAndOrgId(id, tenant(a).getId())
+            .lockEntry(id, tenant(a).getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (!"PENDING".equals(e.getStatus())) throw new ResponseStatusException(
+            HttpStatus.CONFLICT,
+            "Esta despesa já teve uma decisão."
+        );
+        events.save(
+            new br.org.social.model.LedgerEvent(
+                tenant(a).getId(),
+                "EXPENSE",
+                id,
+                decision.equals("approve") ? "APPROVE" : "REJECT",
+                a.getName()
+            )
+        );
         e.setStatus(decision.equals("approve") ? "APPROVED" : "REJECTED");
         e.setApprovedBy(a.getName());
         return es.save(e);

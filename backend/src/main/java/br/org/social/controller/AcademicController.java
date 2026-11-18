@@ -70,7 +70,8 @@ public class AcademicController {
         String name,
         LocalDate birthDate,
         String responsibleName,
-        boolean imageConsent
+        boolean imageConsent,
+        Boolean active
     ) {}
 
     public record StudentOut(
@@ -78,7 +79,8 @@ public class AcademicController {
         String name,
         LocalDate birthDate,
         String responsibleName,
-        boolean imageConsent
+        boolean imageConsent,
+        Boolean active
     ) {}
 
     public record MeetingIn(
@@ -108,7 +110,7 @@ public class AcademicController {
 
     public record NoteIn(String text) {}
 
-    public record NoteOut(Long id, String author, String text) {}
+    public record NoteOut(Long id, String author, String text, java.time.Instant createdAt) {}
 
     public Org org(Authentication a) {
         return members.findByEmailOrLogin(a.getName(), a.getName()).orElseThrow().getOrg();
@@ -156,7 +158,8 @@ public class AcademicController {
                     s.getName(),
                     s.getBirthDate(),
                     s.getResponsibleName(),
-                    s.getImageConsent()
+                    s.getImageConsent(),
+                    s.isActive()
                 )
             )
             .toList();
@@ -175,7 +178,8 @@ public class AcademicController {
             s.getName(),
             s.getBirthDate(),
             s.getResponsibleName(),
-            s.getImageConsent()
+            s.getImageConsent(),
+            s.isActive()
         );
     }
 
@@ -219,6 +223,7 @@ public class AcademicController {
             .findByIdAndOrgId(id, o.getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         validateStudent(i, o);
+        if (i.active() != null) s.setActive(i.active());
         s.setName(i.name().trim());
         s.setBirthDate(i.birthDate());
         s.setResponsibleName(i.responsibleName());
@@ -229,7 +234,8 @@ public class AcademicController {
             s.getName(),
             s.getBirthDate(),
             s.getResponsibleName(),
-            s.getImageConsent()
+            s.getImageConsent(),
+            s.isActive()
         );
     }
 
@@ -267,7 +273,12 @@ public class AcademicController {
             HttpStatus.BAD_REQUEST,
             "Informe a data e um horário de término posterior ao início"
         );
-        ClassMeeting m = new ClassMeeting(o, workshop(id, o.getId()), i.meetingDate(), i.topic());
+        Workshop workshop = workshop(id, o.getId());
+        if (!workshop.getActive()) throw new ResponseStatusException(
+            HttpStatus.CONFLICT,
+            "Esta oficina está encerrada."
+        );
+        ClassMeeting m = new ClassMeeting(o, workshop, i.meetingDate(), i.topic());
         m.setStartTime(i.startTime());
         m.setEndTime(i.endTime());
         m = meetings.save(m);
@@ -308,6 +319,10 @@ public class AcademicController {
         Student s = students
             .findByIdAndOrgId(i.studentId(), o.getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (!w.getActive() || !s.isActive()) throw new ResponseStatusException(
+            HttpStatus.CONFLICT,
+            "Oficina ou participante inativo."
+        );
         if (
             enrollments.existsByWorkshopIdAndStudentIdAndOrgId(id, s.getId(), o.getId())
         ) throw new ResponseStatusException(HttpStatus.CONFLICT, "Participante já matriculado");
@@ -396,7 +411,7 @@ public class AcademicController {
         return notes
             .findByMeetingIdAndOrgId(id, o.getId())
             .stream()
-            .map(n -> new NoteOut(n.getId(), n.getAuthor(), n.getText()))
+            .map(n -> new NoteOut(n.getId(), n.getAuthor(), n.getText(), n.getCreatedAt()))
             .toList();
     }
 
@@ -407,6 +422,6 @@ public class AcademicController {
         PedagogicalNote n = notes.save(
             new PedagogicalNote(o, meeting(id, o.getId()), a.getName(), i.text())
         );
-        return new NoteOut(n.getId(), n.getAuthor(), n.getText());
+        return new NoteOut(n.getId(), n.getAuthor(), n.getText(), n.getCreatedAt());
     }
 }

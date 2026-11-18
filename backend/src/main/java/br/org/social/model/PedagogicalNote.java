@@ -14,6 +14,17 @@ import jakarta.persistence.ManyToOne;
 @Entity
 public class PedagogicalNote {
 
+    private java.time.Instant createdAt;
+
+    public java.time.Instant getCreatedAt() {
+        return createdAt;
+    }
+
+    @jakarta.persistence.PrePersist
+    private void stampCreation() {
+        createdAt = java.time.Instant.now();
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

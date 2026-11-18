@@ -17,10 +17,12 @@ import { date } from "../utils/formatters.js";
 
 export function People({ data, api, doAction, profile }) {
   const [editing, setEditing] = useState(null);
+  const [active, setActive] = useState(true);
   const [photoFile, setPhotoFile] = useState(null);
   const [formError, setFormError] = useState("");
   function openEditor(person = null) {
     setEditing(person);
+    setActive(person?.active !== false);
     setName(person?.name || "");
     setBirthDate(person?.birthDate || "");
     setGuardian(person?.responsibleName || "");
@@ -57,7 +59,13 @@ export function People({ data, api, doAction, profile }) {
       const record = await api(
         editing ? "students/" + editing.id : "students",
         editing ? "PUT" : "POST",
-        { name: name, birthDate: birth || null, responsibleName: guardian, imageConsent: consent },
+        {
+          name: name,
+          birthDate: birth || null,
+          responsibleName: guardian,
+          imageConsent: consent,
+          active,
+        },
       );
       setEditing(record);
       await uploadProfilePhoto("STUDENT", record.id, photoFile);
@@ -135,6 +143,16 @@ export function People({ data, api, doAction, profile }) {
             />
             Consentimento de imagem confirmado
           </label>
+          {editing && (
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={active}
+                onChange={(e) => setActive(e.target.checked)}
+              />
+              Cadastro ativo para novas matrículas
+            </label>
+          )}
           <button disabled={saving}>
             {saving ? "Salvando…" : editing ? "Salvar alterações" : "Cadastrar participante"}
           </button>
@@ -184,6 +202,7 @@ export function People({ data, api, doAction, profile }) {
                   </td>
                   <td role="cell" data-label="Nome">
                     {s.name}
+                    {s.active === false && <small className="table-caption">Inativo</small>}
                   </td>
                   <td role="cell" data-label="Nascimento">
                     {date(s.birthDate)}

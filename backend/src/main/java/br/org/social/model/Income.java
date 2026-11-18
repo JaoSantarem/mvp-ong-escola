@@ -14,7 +14,7 @@ import java.time.LocalDate;
     isGetterVisibility = com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility.NONE
 )
 @Entity
-public class Income {
+public class Income extends FinancialEntry {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -32,6 +32,16 @@ public class Income {
     private BigDecimal amount;
 
     private LocalDate receivedDate;
+    public LocalDate entryDate;
+    private String status;
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String value) {
+        status = value;
+    }
 
     public Long getId() {
         return id;

@@ -39,6 +39,8 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/ledger")
 public class LedgerController {
 
+    final br.org.social.service.LedgerFiles fileStore;
+    final LedgerEventRepository events;
     final MemberRepository members;
     final OrganizationFinanceController api;
     final IncomeController income;
@@ -60,8 +62,12 @@ public class LedgerController {
         StudentRepository students,
         InstructorRepository instructors,
         MemberDirectoryRepository directory,
-        LedgerPersonLinkRepository people
+        LedgerPersonLinkRepository people,
+        br.org.social.service.LedgerFiles fileStore,
+        LedgerEventRepository events
     ) {
+        this.fileStore = fileStore;
+        this.events = events;
         members = m;
         api = a;
         income = i;
@@ -88,7 +94,15 @@ public class LedgerController {
         boolean staffExpense,
         List<Long> participantIds,
         List<Long> instructorIds,
-        List<Long> memberIds
+        List<Long> memberIds,
+        LocalDate dueDate,
+        boolean expected,
+        String beneficiary,
+        String reimbursementTo,
+        String accountName,
+        String method,
+        String schedule,
+        Integer occurrences
     ) {}
 
     public Long org(Authentication a) {
@@ -166,7 +180,7 @@ public class LedgerController {
         api.manager(a);
         Input in = json.readValue(payload, Input.class);
         if (
-            !Set.of("DONATION", "EXPENSE").contains(Objects.toString(in.type(), "")) ||
+            !Set.of("DONATION", "EXPENSE", "CASH_IN").contains(Objects.toString(in.type(), "")) ||
             in.description() == null ||
             in.description().isBlank() ||
             in.description().length() > 255 ||
@@ -179,28 +193,6 @@ public class LedgerController {
         ) throw new ResponseStatusException(
             HttpStatus.BAD_REQUEST,
             "Confira tipo, descrição, data, valor e observação (até 5000 caracteres)"
-        );
-        if (files == null) files = List.of();
-        if (files.size() > 5) throw new ResponseStatusException(
-            HttpStatus.BAD_REQUEST,
-            "Envie até 5 anexos"
-        );
-        long size = 0;
-        for (MultipartFile f : files) {
-            size += f.getSize();
-            String n = Objects.toString(f.getOriginalFilename(), "").toLowerCase(Locale.ROOT);
-            if (
-                f.isEmpty() ||
-                f.getSize() > 15 * 1024 * 1024 ||
-                !n.matches(".*\\.(pdf|png|jpg|jpeg)$")
-            ) throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Use PDF, PNG ou JPG de até 15 MB"
-            );
-        }
-        if (size > 30 * 1024 * 1024) throw new ResponseStatusException(
-            HttpStatus.BAD_REQUEST,
-            "Os anexos devem somar até 30 MB"
         );
         List<LedgerPersonLink> links = new ArrayList<>();
         if ("EXPENSE".equals(in.type())) {
@@ -216,70 +208,145 @@ public class LedgerController {
             HttpStatus.BAD_REQUEST,
             "Vínculos de pessoas e staff são exclusivos de despesas."
         );
-        Long id;
-        if ("DONATION".equals(in.type())) id = income
-            .add(
-                new IncomeController.Input(
-                    "DONATION",
-                    in.description(),
-                    in.source(),
-                    in.amount(),
-                    in.date(),
-                    in.projectId()
-                ),
-                a
-            )
-            .id();
-        else {
-            if (
-                in.projectId() == null || in.category() == null || in.category().isBlank()
-            ) throw new ResponseStatusException(
+        boolean expense = "EXPENSE".equals(in.type());
+        boolean scheduled =
+            in.schedule() != null && !in.schedule().isBlank() && !"ONCE".equals(in.schedule());
+        int count = scheduled && in.occurrences() != null ? in.occurrences() : 1;
+        if (
+            scheduled &&
+            (!Set.of("INSTALLMENTS", "REPEAT").contains(in.schedule()) ||
+                count < 2 ||
+                count > 60 ||
+                (!expense && !in.expected()) ||
+                in.dueDate() == null)
+        ) throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Confira a quantidade e o vencimento da série mensal."
+        );
+        if (in.expected() && in.dueDate() == null) throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Informe o vencimento da conta a receber."
+        );
+        for (String field : new String[] {
+            in.beneficiary(),
+            in.reimbursementTo(),
+            in.source(),
+            in.accountName(),
+            in.method(),
+            in.category(),
+            in.reference(),
+        })
+            if (field != null && field.length() > 255) throw new ResponseStatusException(
                 HttpStatus.BAD_REQUEST,
-                "Informe projeto e categoria"
+                "Use até 255 caracteres por campo."
             );
-            id = api
-                .addE(
+        if (
+            !expense && !in.expected() && in.date().isAfter(LocalDate.now())
+        ) throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Use uma previsão para recebimentos futuros."
+        );
+        long cents = in.amount().movePointRight(2).longValueExact();
+        boolean split = "INSTALLMENTS".equals(in.schedule());
+        if (split && cents < count) throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST,
+            "Cada parcela deve valer ao menos um centavo."
+        );
+        List<Long> ids = new ArrayList<>();
+        for (int index = 0; index < count; index++) {
+            BigDecimal amount = split
+                ? BigDecimal.valueOf(cents / count + (index < cents % count ? 1 : 0), 2)
+                : in.amount();
+            LocalDate due = in.dueDate() == null ? null : in.dueDate().plusMonths(index);
+            String description = in.description().trim();
+            Long id;
+            if (!expense) {
+                var record = new br.org.social.model.Income();
+                record.setOrg(api.tenant(a));
+                record.setProject(
+                    in.projectId() == null
+                        ? null
+                        : api.ps
+                              .findByIdAndOrgId(in.projectId(), org(a))
+                              .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND))
+                );
+                record.setType(in.type());
+                record.setDescription(description);
+                record.setSource(in.source());
+                record.setAmount(amount);
+                record.entryDate = in.date();
+                record.dueDate = due;
+                record.setStatus(in.expected() ? "EXPECTED" : "RECEIVED");
+                if (!in.expected()) record.setReceivedDate(in.date());
+                id = income.incomes.save(record).getId();
+            } else {
+                if (
+                    in.category() == null || in.category().isBlank()
+                ) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Informe a categoria");
+                var expenseRecord = api.addE(
                     new OrganizationFinanceController.EIn(
                         in.projectId(),
                         in.workshopId(),
-                        in.description(),
+                        description,
                         in.category(),
-                        in.amount(),
+                        amount,
                         in.date(),
                         in.reference()
                     ),
                     a
-                )
-                .getId();
-        }
-        Long o = org(a);
-        LedgerExtra e = new LedgerExtra();
-        e.setOrgId(o);
-        e.setKind(in.type());
-        e.setRecordId(id);
-        e.setObservation(in.observation());
-        e.setStaffExpense("EXPENSE".equals(in.type()) && in.staffExpense());
-        for (LedgerPersonLink link : links) {
-            link.kind = in.type();
-            link.recordId = id;
-            people.save(link);
-        }
-        extras.save(e);
-        for (MultipartFile f : files) {
-            LedgerAttachment t = new LedgerAttachment();
-            t.setOrgId(o);
-            t.setKind(in.type());
-            t.setRecordId(id);
-            t.setName(
-                Objects.toString(f.getOriginalFilename(), "anexo").replaceAll("[\\\\/\\r\\n]", "_")
+                );
+                expenseRecord.dueDate = due;
+                expenseRecord.beneficiary = in.beneficiary();
+                expenseRecord.reimbursementTo = in.staffExpense() ? in.reimbursementTo() : null;
+                id = expenseRecord.getId();
+            }
+            Long o = org(a);
+            LedgerExtra e = new LedgerExtra();
+            e.setOrgId(o);
+            e.setKind(in.type());
+            e.setRecordId(id);
+            e.setObservation(in.observation());
+            e.setStaffExpense("EXPENSE".equals(in.type()) && in.staffExpense());
+            for (LedgerPersonLink person : links) {
+                LedgerPersonLink link = new LedgerPersonLink();
+                link.orgId = person.orgId;
+                link.personType = person.personType;
+                link.personId = person.personId;
+                link.name = person.name;
+                link.kind = in.type();
+                link.recordId = id;
+                people.save(link);
+            }
+            extras.save(e);
+            var created = new br.org.social.model.LedgerEvent(
+                o,
+                in.type(),
+                id,
+                "CREATE",
+                a.getName()
             );
-            if (t.getName().length() > 200) t.setName(
-                t.getName().substring(t.getName().length() - 200)
-            );
-            t.setContent(f.getBytes());
-            attachments.save(t);
+            if (scheduled) created.note =
+                (split ? "Parcela " : "Mensalidade ") + (index + 1) + " de " + count;
+            events.save(created);
+            if (!expense && !in.expected()) {
+                var receipt = new br.org.social.model.LedgerEvent(
+                    o,
+                    in.type(),
+                    id,
+                    "SETTLE",
+                    a.getName()
+                );
+                receipt.amount = amount;
+                receipt.movementDate = in.date();
+                receipt.accountName = in.accountName();
+                receipt.method = in.method();
+                events.save(receipt);
+            }
+            // Os documentos de origem da série ficam no primeiro lançamento.
+            if (index == 0) fileStore.save(o, in.type(), id, null, files);
+            ids.add(id);
         }
-        return Map.of("id", id, "type", in.type());
+        return Map.of("id", ids.get(0), "ids", ids, "type", in.type());
     }
 
     @GetMapping
@@ -287,17 +354,27 @@ public class LedgerController {
     public List<Map<String, Object>> list(Authentication a) {
         Long o = org(a);
         List<Map<String, Object>> rows = new ArrayList<>();
-        for (IncomeController.Output i : income.list(a)) {
+        var histories = events
+            .findByOrgIdOrderById(o)
+            .stream()
+            .collect(
+                java.util.stream.Collectors.groupingBy(event -> event.kind + ":" + event.recordId)
+            );
+        for (var i : income.incomes.findByOrgIdOrderByReceivedDateDescIdDesc(o)) {
             Map<String, Object> r = new LinkedHashMap<>();
-            r.put("id", i.id());
-            r.put("type", i.type());
-            r.put("description", i.description());
-            r.put("source", i.source());
-            r.put("amount", i.amount());
-            r.put("date", i.receivedDate());
-            r.put("project", i.projectName());
-            r.put("projectId", i.projectId());
-            r.put("status", "RECEIVED");
+            r.put("id", i.getId());
+            r.put("type", i.getType());
+            r.put("description", i.getDescription());
+            r.put("source", i.getSource());
+            r.put("amount", i.getAmount());
+            r.put("date", i.entryDate == null ? i.getReceivedDate() : i.entryDate);
+            r.put("project", i.getProject() == null ? null : i.getProject().getName());
+            r.put("projectId", i.getProject() == null ? null : i.getProject().getId());
+            FinancialActions.describe(
+                r,
+                i,
+                histories.getOrDefault(i.getType() + ":" + i.getId(), List.of())
+            );
             rows.add(r);
         }
         for (Expense e : api.expenses(a)) {
@@ -312,7 +389,11 @@ public class LedgerController {
             r.put("workshop", e.getWorkshop() == null ? null : e.getWorkshop().getName());
             r.put("category", e.getCategory());
             r.put("reference", e.getDocumentName());
-            r.put("status", e.getStatus());
+            FinancialActions.describe(
+                r,
+                e,
+                histories.getOrDefault("EXPENSE:" + e.getId(), List.of())
+            );
             r.put("approvedBy", e.getApprovedBy());
             if (e.getDocumentKey() != null) r.put(
                 "legacyAttachment",
@@ -326,7 +407,7 @@ public class LedgerController {
             rows.add(r);
         }
         List<LedgerExtra> es = extras.findByOrgId(o);
-        List<LedgerAttachment> fs = attachments.findByOrgId(o);
+        var fs = attachments.listMetadata(o);
         List<LedgerPersonLink> personRows = people.findByOrgId(o);
         for (Map<String, Object> r : rows) {
             r.put("staffExpense", false);
@@ -377,7 +458,14 @@ public class LedgerController {
                             f.getKind().equals(r.get("type")) && f.getRecordId().equals(r.get("id"))
                     )
                     .map(f ->
-                        Map.of("name", f.getName(), "url", "/api/ledger/attachments/" + f.getId())
+                        Map.of(
+                            "name",
+                            f.getName(),
+                            "url",
+                            "/api/ledger/attachments/" + f.getId(),
+                            "eventId",
+                            f.getEventId() == null ? 0L : f.getEventId()
+                        )
                     )
                     .toList()
             );

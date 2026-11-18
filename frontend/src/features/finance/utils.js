@@ -4,14 +4,14 @@ import { apiFetch } from "../../services/api.js";
 export const numeric = (v) => Number(v.replace(/\D/g, "")) / 100;
 
 export function value(r, k) {
-  return k === "date"
-    ? day(r.date)
+  return ["date", "dueDate", "lastMovement"].includes(k)
+    ? day(r[k])
     : k === "type"
       ? types[r.type] || r.type
       : k === "status"
         ? statuses[r.status] || r.status
-        : k === "amount"
-          ? money(r.amount)
+        : ["amount", "settledAmount", "openAmount"].includes(k)
+          ? money(r[k])
           : k === "attachments"
             ? filesOf(r)
                 .map((f) => f.name)

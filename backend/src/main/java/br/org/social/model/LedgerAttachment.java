@@ -20,6 +20,7 @@ public class LedgerAttachment {
     private String kind;
     private Long recordId;
     private String name;
+    public Long eventId;
 
     @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.LONGVARBINARY)
     private byte[] content;

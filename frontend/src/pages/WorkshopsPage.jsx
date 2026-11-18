@@ -1,31 +1,14 @@
+import { WorkshopEditor } from "../components/WorkshopEditor.jsx";
 import { CardAction } from "../components/ui/CardAction.jsx";
-import { FormModal } from "../components/ui/FormModal.jsx";
 import { ListToolbar, matchesSearch } from "../components/ui/ListToolbar.jsx";
 import React, { useState } from "react";
 import { Heading } from "../components/ui/Heading.jsx";
-import { Form } from "../components/ui/Form.jsx";
-import { Field } from "../components/ui/Field.jsx";
 
 export function WorkshopList({ data, api, refresh, doAction, setPage }) {
-  const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
   const filtered = data.workshops.filter((w) => matchesSearch([w.name, w.description], search));
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  async function create(e) {
-    e.preventDefault();
-    if (saving) return;
-    setSaving(true);
-    const saved = await doAction(() => api("workshops", "POST", { name, description }));
-    setSaving(false);
-    if (!saved) return;
-    setCreating(false);
-    setNotice("Oficina cadastrada com sucesso.");
-    setName("");
-    setDescription("");
-  }
   return (
     <>
       <Heading
@@ -47,33 +30,17 @@ export function WorkshopList({ data, api, refresh, doAction, setPage }) {
           {notice}
         </p>
       )}
-      <FormModal
-        busy={saving}
-        open={creating}
-        onClose={() => setCreating(false)}
-        title="Cadastrar oficina"
-      >
-        <Form onSubmit={create}>
-          <Field>
-            Nome
-            <input
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex.: Teatro e expressão"
-            />
-          </Field>
-          <Field>
-            Conteúdo / descrição
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Objetivos e conteúdo programático"
-            />
-          </Field>
-          <button disabled={saving}>{saving ? "Salvando…" : "Criar oficina"}</button>
-        </Form>
-      </FormModal>
+      {creating && (
+        <WorkshopEditor
+          api={api}
+          doAction={doAction}
+          onClose={() => setCreating(false)}
+          onSaved={() => {
+            setCreating(false);
+            setNotice("Oficina cadastrada.");
+          }}
+        />
+      )}
       <ListToolbar
         label="Buscar oficina por nome ou descrição"
         placeholder="Buscar oficina por nome ou descrição…"

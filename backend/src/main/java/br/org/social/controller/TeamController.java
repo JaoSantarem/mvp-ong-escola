@@ -93,9 +93,15 @@ public class TeamController {
 
     public record PositionAssign(Long positionId) {}
 
-    public record InstructorIn(String name, String area, String contact) {}
+    public record InstructorIn(String name, String area, String contact, Boolean active) {}
 
-    public record InstructorOut(Long id, String name, String area, String contact) {}
+    public record InstructorOut(
+        Long id,
+        String name,
+        String area,
+        String contact,
+        Boolean active
+    ) {}
 
     public record WorkshopInstructorOut(Long id, InstructorOut instructor) {}
 
@@ -297,7 +303,9 @@ public class TeamController {
         return instructors
             .findByOrgId(org(a).getId())
             .stream()
-            .map(i -> new InstructorOut(i.getId(), i.getName(), i.getArea(), i.getContact()))
+            .map(i ->
+                new InstructorOut(i.getId(), i.getName(), i.getArea(), i.getContact(), i.isActive())
+            )
             .toList();
     }
 
@@ -314,7 +322,8 @@ public class TeamController {
             instructor.getId(),
             instructor.getName(),
             instructor.getArea(),
-            instructor.getContact()
+            instructor.getContact(),
+            instructor.isActive()
         );
     }
 
@@ -344,6 +353,7 @@ public class TeamController {
             .findByIdAndOrgId(id, org(a).getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         validateInstructor(i);
+        if (i.active() != null) instructor.setActive(i.active());
         instructor.setName(i.name().trim());
         instructor.setArea(i.area());
         instructor.setContact(i.contact());
@@ -352,7 +362,8 @@ public class TeamController {
             instructor.getId(),
             instructor.getName(),
             instructor.getArea(),
-            instructor.getContact()
+            instructor.getContact(),
+            instructor.isActive()
         );
     }
 
@@ -375,7 +386,8 @@ public class TeamController {
                         x.getInstructor().getId(),
                         x.getInstructor().getName(),
                         x.getInstructor().getArea(),
-                        x.getInstructor().getContact()
+                        x.getInstructor().getContact(),
+                        x.getInstructor().isActive()
                     )
                 )
             )
@@ -398,13 +410,17 @@ public class TeamController {
         Instructor i = instructors
             .findByIdAndOrgId(input.instructorId(), o.getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (!w.getActive() || !i.isActive()) throw new ResponseStatusException(
+            HttpStatus.CONFLICT,
+            "Oficina ou instrutor inativo."
+        );
         if (
             assignments.existsByWorkshopIdAndInstructorIdAndOrgId(id, i.getId(), o.getId())
         ) throw new ResponseStatusException(HttpStatus.CONFLICT, "Instrutor já designado");
         WorkshopInstructor assignment = assignments.save(new WorkshopInstructor(o, w, i));
         return new WorkshopInstructorOut(
             assignment.getId(),
-            new InstructorOut(i.getId(), i.getName(), i.getArea(), i.getContact())
+            new InstructorOut(i.getId(), i.getName(), i.getArea(), i.getContact(), i.isActive())
         );
     }
 
@@ -440,14 +456,14 @@ public class TeamController {
     @GetMapping(value = "/reports/expenses.csv", produces = "text/csv;charset=UTF-8")
     public org.springframework.http.ResponseEntity<String> expenseCsv(Authentication a) {
         StringBuilder csv = new StringBuilder(
-            "ï»¿data,projeto,fonte,categoria,descricao,valor,status,comprovante\n"
+            "\ufeffdata,projeto,fonte,categoria,descricao,valor,status,comprovante\n"
         );
         for (Expense e : expenses.findByOrgId(org(a).getId())) {
             csv.append(csv(e.getExpenseDate() == null ? "" : e.getExpenseDate().toString()))
                 .append(',')
-                .append(csv(e.getProject().getName()))
+                .append(csv(e.getProject() == null ? "" : e.getProject().getName()))
                 .append(',')
-                .append(csv(e.getProject().getFunder()))
+                .append(csv(e.getProject() == null ? "" : e.getProject().getFunder()))
                 .append(',')
                 .append(csv(e.getCategory()))
                 .append(',')

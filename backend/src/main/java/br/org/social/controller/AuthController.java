@@ -189,6 +189,7 @@ public class AuthController {
         );
     }
 
+    @org.springframework.transaction.annotation.Transactional
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(
         @RequestHeader(value = "Authorization", required = false) String header

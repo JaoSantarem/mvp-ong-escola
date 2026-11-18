@@ -15,6 +15,16 @@ import java.time.LocalDate;
 @Entity
 public class Student {
 
+    private Boolean active;
+
+    public boolean isActive() {
+        return !Boolean.FALSE.equals(active);
+    }
+
+    public void setActive(boolean value) {
+        active = value;
+    }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

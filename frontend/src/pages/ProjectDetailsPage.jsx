@@ -1,10 +1,13 @@
+import { ProjectEditor } from "../components/ProjectEditor.jsx";
+import { EditButton } from "../components/ui/EditButton.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import { Heading } from "../components/ui/Heading.jsx";
 import { FormModal } from "../components/ui/FormModal.jsx";
 import { PhotoUploadModal, AuthenticatedImage, PhotoAction } from "../components/photos/Photos.jsx";
 import { brl, date } from "../utils/formatters.js";
-export function ProjectDetails({ projectId, data, api, profile, setPage }) {
+export function ProjectDetails({ projectId, data, api, profile, setPage, doAction }) {
   const project = data.projects.find((p) => p.id === projectId);
+  const [editing, setEditing] = useState(false);
   const [photos, setPhotos] = useState([]),
     [from, setFrom] = useState(""),
     [until, setUntil] = useState("");
@@ -53,13 +56,36 @@ export function ProjectDetails({ projectId, data, api, profile, setPage }) {
       </div>
     );
   const canUpload = ["ADMIN", "COORDINATOR"].includes(profile?.role);
+  const expenses = data.expenses.filter((row) => row.projectId === projectId);
+  const paid =
+    expenses.reduce((sum, row) => sum + Math.round(Number(row.settledAmount || 0) * 100), 0) / 100;
+  const committed =
+    expenses
+      .filter((row) => ["APPROVED", "PARTIAL"].includes(row.status))
+      .reduce((sum, row) => sum + Math.round(Number(row.openAmount || 0) * 100), 0) / 100;
   return (
     <>
       <button type="button" className="back-button" onClick={() => setPage("projects")}>
         <span aria-hidden="true">←</span> Voltar aos projetos
       </button>
+      {editing && (
+        <ProjectEditor
+          record={project}
+          api={api}
+          doAction={doAction}
+          onClose={() => setEditing(false)}
+          onSaved={() => setEditing(false)}
+        />
+      )}
       <Heading
-        title={project.name}
+        title={
+          <span className="ledger-actions">
+            {project.name}
+            {["ADMIN", "COORDINATOR"].includes(profile?.role) && (
+              <EditButton name={project.name} onClick={() => setEditing(true)} />
+            )}
+          </span>
+        }
         sub="Informações e registros fotográficos do projeto."
         action={
           canUpload && (
@@ -77,6 +103,18 @@ export function ProjectDetails({ projectId, data, api, profile, setPage }) {
         <div>
           <dt>Orçamento previsto</dt>
           <dd>{brl(project.budget)}</dd>
+        </div>
+        <div>
+          <dt>Pago</dt>
+          <dd>{brl(paid)}</dd>
+        </div>
+        <div>
+          <dt>Aprovado a pagar</dt>
+          <dd>{brl(committed)}</dd>
+        </div>
+        <div>
+          <dt>Orçamento disponível</dt>
+          <dd>{brl(Number(project.budget || 0) - paid - committed)}</dd>
         </div>
         <div>
           <dt>Financeiro do projeto</dt>

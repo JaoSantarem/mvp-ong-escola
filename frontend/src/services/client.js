@@ -4,11 +4,12 @@ import { apiFetch } from "./api.js";
 export function createApiClient(auth, onSessionExpired, request = apiFetch) {
   return async function api(path, method = "GET", body) {
     const headers = { ...(auth ? { Authorization: "Bearer " + auth } : {}) };
-    if (body !== undefined) headers["Content-Type"] = "application/json";
+    const multipart = body instanceof FormData;
+    if (body !== undefined && !multipart) headers["Content-Type"] = "application/json";
     const r = await request("/api/" + path, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined || multipart ? body : JSON.stringify(body),
     });
     if (r.status === 401) {
       onSessionExpired();

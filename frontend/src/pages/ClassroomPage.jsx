@@ -1,3 +1,5 @@
+import { WorkshopEditor } from "../components/WorkshopEditor.jsx";
+import { EditButton } from "../components/ui/EditButton.jsx";
 import { DeleteMeetingModal } from "../components/calendar/DeleteMeetingModal.jsx";
 import { PersonPhoto, useAvatars } from "../components/photos/Photos.jsx";
 import { NavIcon } from "../components/ui/NavIcon.jsx";
@@ -14,6 +16,7 @@ import { date } from "../utils/formatters.js";
 import { AttendanceModal } from "../components/calendar/AttendanceModal.jsx";
 
 export function Classroom({ api, data, doAction, setPage, workshopId, profile, refresh }) {
+  const [editing, setEditing] = useState(false);
   const [roster, setRoster] = useState([]);
   const [addStudent, setAddStudent] = useState("");
   const [rosterBusy, setRosterBusy] = useState(false);
@@ -85,10 +88,27 @@ export function Classroom({ api, data, doAction, setPage, workshopId, profile, r
       <button type="button" className="back-button" onClick={() => setPage("workshops")}>
         <span aria-hidden="true">←</span> Voltar às oficinas
       </button>
+      {editing && (
+        <WorkshopEditor
+          record={workshop}
+          api={api}
+          doAction={doAction}
+          onClose={() => setEditing(false)}
+          onSaved={() => setEditing(false)}
+        />
+      )}
       <Heading
-        title={workshop.name}
+        title={
+          <span className="ledger-actions">
+            {workshop.name}
+            {["ADMIN", "COORDINATOR"].includes(profile?.role) && (
+              <EditButton name={workshop.name} onClick={() => setEditing(true)} />
+            )}
+          </span>
+        }
         action={
-          section === "meetings" && (
+          section === "meetings" &&
+          workshop.active && (
             <button
               type="button"
               className="primary-button"
@@ -115,7 +135,7 @@ export function Classroom({ api, data, doAction, setPage, workshopId, profile, r
           ? "Agende os encontros e abra uma chamada para registrar presenças e observações pedagógicas."
           : "Vincule os instrutores e matricule os participantes desta oficina."}
       </p>
-      <div className="classroom-add-actions" hidden={section !== "members"}>
+      <div className="classroom-add-actions" hidden={section !== "members" || !workshop.active}>
         <button
           type="button"
           className="secondary-button"
@@ -150,7 +170,9 @@ export function Classroom({ api, data, doAction, setPage, workshopId, profile, r
             <select required value={instructor} onChange={(e) => setInstructor(e.target.value)}>
               <option value="">Selecione</option>
               {(data.instructors || [])
-                .filter((i) => !assignments.some((x) => x.instructor.id === i.id))
+                .filter(
+                  (i) => i.active !== false && !assignments.some((x) => x.instructor.id === i.id),
+                )
                 .map((i) => (
                   <option key={i.id} value={i.id}>
                     {i.name}
@@ -184,7 +206,9 @@ export function Classroom({ api, data, doAction, setPage, workshopId, profile, r
             <select required value={student} onChange={(e) => setStudent(e.target.value)}>
               <option value="">Selecione</option>
               {data.students
-                .filter((s) => !enrollments.some((x) => x.student.id === s.id))
+                .filter(
+                  (s) => s.active !== false && !enrollments.some((x) => x.student.id === s.id),
+                )
                 .map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -457,7 +481,7 @@ export function Classroom({ api, data, doAction, setPage, workshopId, profile, r
                 >
                   <option value="">Selecione um aluno cadastrado</option>
                   {data.students
-                    .filter((s) => !roster.some((r) => r.id === s.id))
+                    .filter((s) => s.active !== false && !roster.some((r) => r.id === s.id))
                     .map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
@@ -561,7 +585,8 @@ export function Classroom({ api, data, doAction, setPage, workshopId, profile, r
               <p className="note" key={n.id}>
                 {n.text}
                 <small>
-                  {n.author} · {n.createdAt?.slice(0, 10)}
+                  {n.author}
+                  {n.createdAt && " · " + new Date(n.createdAt).toLocaleString("pt-BR")}
                 </small>
               </p>
             ))}

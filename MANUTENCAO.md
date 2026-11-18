@@ -41,6 +41,15 @@ Comece pela tela que deseja alterar. Você não precisa entender o projeto intei
 Os caminhos são relativos a `/api/`; não escreva o endereço do servidor nas páginas.
 Uploads usam `services/api.js` diretamente porque enviam `FormData`, em vez de JSON.
 
+## Como o financeiro calcula os saldos
+
+A despesa guarda a decisão de aprovação. Cada pagamento ou recebimento cria um registro em `LedgerEvent` com valor, conta e data efetiva. Um estorno cria outro registro com o valor negativo e uma referência à baixa original. O histórico permite conferir os dois movimentos. A correção de uma despesa a devolve para aprovação.
+
+- `LedgerController.java` cria os lançamentos, divide parcelas em centavos e monta as linhas para consulta.
+- `FinancialActions.java` valida as mudanças de situação e calcula o valor baixado e o saldo em aberto. A revisão apresentada na tela e o bloqueio da linha protegem contra baixas duplicadas.
+- `frontend/src/features/finance/summary.js` soma baixas pela data de movimentação e valores ainda em aberto pelo vencimento. Valores sem vencimento aparecem na consulta sem período.
+- Receitas antigas conservam a data do recebimento. Uma despesa antiga aprovada passa a contar como paga quando recebe uma baixa.
+
 ## Como ler os formulários React
 
 ```jsx

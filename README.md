@@ -49,7 +49,9 @@ Comandos úteis: `docker compose -f docker-compose.prod.yml logs -f`, `docker co
 - Oficinas com conteúdo/descrição e instrutores sem quantidade mínima fixa.
 - Participantes, responsável para menores, consentimento de imagem e matrícula.
 - Encontros, chamada por participante e observações pedagógicas.
-- Projetos, fontes de recurso, orçamento, despesas associadas opcionalmente a oficinas e aprovação/recusa.
+- Projetos com orçamento, valores comprometidos e pagamentos realizados.
+- Contas a pagar e a receber por vencimento, com aprovação, baixa parcial ou integral, comprovantes e estornos. O resumo considera as datas efetivas das movimentações e permite filtrar por projeto.
+- Parcelamento e repetição mensal, despesas administrativas e identificação de reembolsos à equipe.
 - Anexo de comprovante PDF/PNG/JPG por despesa, guardado localmente em backend/uploads e servido apenas ao usuário autenticado da mesma organização.
 - Visão geral da organização e exportação de despesas CSV.
 

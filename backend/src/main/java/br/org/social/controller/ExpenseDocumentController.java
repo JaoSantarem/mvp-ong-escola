@@ -52,6 +52,7 @@ public class ExpenseDocumentController {
         root = Paths.get(uploadDir).toAbsolutePath().normalize();
     }
 
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     @PostMapping("/{id}/document")
     public ResponseEntity<?> upload(
         @PathVariable Long id,
@@ -67,7 +68,7 @@ public class ExpenseDocumentController {
             HttpStatus.FORBIDDEN
         );
         Expense expense = expenses
-            .findByIdAndOrgId(id, org.getId())
+            .lockEntry(id, org.getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (file.isEmpty() || file.getSize() > 15 * 1024 * 1024) throw new ResponseStatusException(
             HttpStatus.BAD_REQUEST,

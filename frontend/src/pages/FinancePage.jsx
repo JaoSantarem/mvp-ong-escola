@@ -1,14 +1,22 @@
-import { filterSummaryRows } from "../features/finance/summary.js";
+import { cashSummary } from "../features/finance/summary.js";
 import { FormModal } from "../components/ui/FormModal.jsx";
 import { SectionNav } from "../components/ui/SectionNav.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import { fields, initial, statuses, types } from "../features/finance/constants.js";
 import { day, downloadBlob, mask, money, numeric, value } from "../features/finance/utils.js";
-import { apiFetch } from "../services/api.js";
 import { ExportModal } from "../features/finance/components/ExportModal.jsx";
-import { Detail } from "../features/finance/components/TransactionDetailsModal.jsx";
+import { Detail, MovementFields } from "../features/finance/components/TransactionDetailsModal.jsx";
 
-export function FinanceView({ data, api, refresh, section = "summary", setPage, initialProject }) {
+export function FinanceView({
+  data,
+  api,
+  refresh,
+  profile,
+  section = "summary",
+  setPage,
+  initialProject,
+}) {
+  const canManage = ["ADMIN", "COORDINATOR"].includes(profile?.role);
   const [summaryProject, setSummaryProject] = useState(
     initialProject ? String(initialProject) : "",
   );
@@ -32,6 +40,7 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [filters, setFilters] = useState({});
   const [from, setFrom] = useState("");
   const [until, setUntil] = useState("");
@@ -114,6 +123,10 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
         "data",
         JSON.stringify({
           ...form,
+          expected: form.type !== "EXPENSE" && form.expected,
+          dueDate: form.type === "EXPENSE" || form.expected ? form.dueDate || null : null,
+          schedule: form.type === "EXPENSE" || form.expected ? form.schedule : "ONCE",
+          occurrences: Number(form.occurrences),
           staffExpense: form.type === "EXPENSE" && form.staffExpense,
           participantIds: form.type === "EXPENSE" ? form.participantIds : [],
           instructorIds: form.type === "EXPENSE" ? form.instructorIds : [],
@@ -124,28 +137,22 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
         }),
       );
       files.forEach((f) => body.append("files", f));
-      const res = await apiFetch("/api/ledger", {
-        method: "POST",
-        headers: { Authorization: "Bearer " + sessionStorage.getItem("ong-auth") },
-        body,
-      });
-      if (!res.ok) {
-        const result = await res.json().catch(() => ({}));
-        throw Error(
-          result.message ||
-            result.detail ||
-            "Não foi possível registrar. Confira os campos e os anexos.",
-        );
-      }
+      const result = await api("ledger", "POST", body);
       created = true;
       setForm(initial);
       setFiles([]);
       setFileError("");
       formRef.current.reset();
-      setNotice("Lançamento registrado com sucesso.");
+      setNotice(
+        result.ids?.length > 1
+          ? result.ids.length + " lançamentos mensais registrados."
+          : "Lançamento registrado com sucesso.",
+      );
+      setPage(
+        "finance:" + (returnSection.current === "summary" ? "ledger" : returnSection.current),
+      );
       await load();
       await refresh();
-      setPage("finance:ledger");
     } catch (e) {
       setError(
         created
@@ -162,13 +169,18 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase();
   const invalidRange = from && until && from > until;
+  const queue = viewSection === "payables" || viewSection === "receivables";
+  const listDate = (row) => (queue ? row.dueDate : row.date);
   const filtered = rows
     .filter(
       (r) =>
         !invalidRange &&
-        selectedTypes[r.type === "EXPENSE" ? "EXPENSE" : "DONATION"] &&
-        (!from || r.date >= from) &&
-        (!until || r.date <= until) &&
+        (!queue ||
+          (Number(r.openAmount) > 0 && (viewSection === "payables") === (r.type === "EXPENSE"))) &&
+        (!queue || !onlyOverdue || r.overdue) &&
+        (queue || selectedTypes[r.type === "EXPENSE" ? "EXPENSE" : "DONATION"]) &&
+        (!from || listDate(r) >= from) &&
+        (!until || (listDate(r) && listDate(r) <= until)) &&
         Object.entries(filters).every(
           ([k, v]) =>
             !v ||
@@ -179,21 +191,18 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
                 : normalize(value(r, k)).includes(normalize(v))),
         ),
     )
-    .sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id - a.id);
+    .sort((a, b) =>
+      queue
+        ? (a.dueDate || "9999").localeCompare(b.dueDate || "9999") || a.id - b.id
+        : (b.date || "").localeCompare(a.date || "") || b.id - a.id,
+    );
   const summaryInvalid = !!(summaryFrom && summaryUntil && summaryFrom > summaryUntil);
-  const summaryRows = filterSummaryRows(rows, {
+  const totals = cashSummary(rows, {
     from: summaryFrom,
     until: summaryUntil,
     project: summaryProject,
   });
-  const receivedCents = summaryRows
-    .filter((r) => r.type !== "EXPENSE")
-    .reduce((n, r) => n + Math.round(Number(r.amount) * 100), 0);
-  const expenseCents = summaryRows
-    .filter((r) => r.type === "EXPENSE" && r.status === "APPROVED")
-    .reduce((n, r) => n + Math.round(Number(r.amount) * 100), 0);
-  const cash = (receivedCents - expenseCents) / 100;
-  const summaryValue = (n) => (loading || summaryInvalid ? "—" : money(n));
+  const summaryValue = (cents) => (loading || summaryInvalid ? "—" : money(cents / 100));
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -226,20 +235,42 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
           <h1>Financeiro</h1>
           <p>Acompanhe o caixa, confira os registros e mantenha as contas em dia.</p>
         </div>
-        <button
-          type="button"
-          className="primary-button"
-          onClick={() => setPage("finance:register")}
-        >
-          + Novo lançamento
-        </button>
+        {canManage && (
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => {
+              setForm({
+                ...initial,
+                type: viewSection === "payables" ? "EXPENSE" : "DONATION",
+                projectId: summaryProject === "none" ? "" : summaryProject,
+              });
+              setFiles([]);
+              setFileError("");
+              setError("");
+              setNotice("");
+              setPage("finance:register");
+            }}
+          >
+            + Novo lançamento
+          </button>
+        )}
       </div>
       <SectionNav
         label="Seções do financeiro"
         value={viewSection}
-        onChange={(next) => setPage("finance:" + next)}
+        onChange={(next) => {
+          setFilters({});
+          setFrom("");
+          setUntil("");
+          setOnlyOverdue(false);
+          setPageNumber(1);
+          setPage("finance:" + next);
+        }}
         items={[
           ["summary", "Resumo"],
+          ["payables", "Contas a pagar"],
+          ["receivables", "Contas a receber"],
           ["ledger", "Lançamentos"],
         ]}
       />
@@ -251,8 +282,8 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
         <div>
           <strong>Resumo financeiro</strong>
           <p>
-            O projeto e as datas atualizam os quatro indicadores. Sem filtros, considera todo o
-            histórico.
+            Pagamentos e recebimentos usam a data da baixa. Valores em aberto usam o vencimento e
+            incluem despesas em aprovação.
           </p>
         </div>
         <div className="ledger-actions">
@@ -303,23 +334,22 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
           </p>
         )}
         <div className="stats summary-cards" aria-live="polite">
-          <article>
-            <small>Total recebido</small>
-            <b>{summaryValue(receivedCents / 100)}</b>
-          </article>
-          <article>
-            <small>Despesas aprovadas</small>
-            <b>{summaryValue(expenseCents / 100)}</b>
-          </article>
-          <article>
-            <small>Lançamentos</small>
-            <b>{loading || summaryInvalid ? "—" : summaryRows.length}</b>
-          </article>
-          <article className={cash < 0 ? "cash-card cash-negative" : "cash-card"}>
-            <small>Caixa atual</small>
-            <b>{summaryValue(cash)}</b>
-            <span className="cash-caption">Recebido menos despesas aprovadas no período</span>
-          </article>
+          {[
+            ["received", "Recebido"],
+            ["paid", "Pago"],
+            ["cash", "Saldo realizado no período"],
+            ["toReceive", "A receber"],
+            ["toPay", "A pagar"],
+            ["forecast", "Saldo projetado no período"],
+          ].map(([key, label]) => (
+            <article
+              key={key}
+              className={key === "cash" || key === "forecast" ? "cash-card" : undefined}
+            >
+              <small>{label}</small>
+              <b>{summaryValue(totals[key])}</b>
+            </article>
+          ))}
         </div>
       </section>
       {error && section !== "register" && (
@@ -349,10 +379,11 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
             Tipo
             <select value={form.type} disabled={busy} onChange={(e) => set("type", e.target.value)}>
               <option value="DONATION">Doação</option>
+              <option value="CASH_IN">Outra entrada de caixa</option>
               <option value="EXPENSE">Despesa</option>
             </select>
           </label>
-          {form.type === "DONATION" && (
+          {form.type !== "EXPENSE" && (
             <label>
               Doador / origem
               <input
@@ -362,19 +393,36 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
               />
             </label>
           )}
+          {form.type !== "EXPENSE" ? (
+            <label>
+              Situação da receita
+              <select
+                value={form.expected ? "expected" : "received"}
+                onChange={(e) => set("expected", e.target.value === "expected")}
+              >
+                <option value="expected">A receber</option>
+                <option value="received">Já recebida</option>
+              </select>
+            </label>
+          ) : (
+            <label>
+              Fornecedor / favorecido
+              <input
+                required
+                maxLength={255}
+                value={form.beneficiary}
+                onChange={(e) => set("beneficiary", e.target.value)}
+              />
+            </label>
+          )}
           <label>
-            Vincular a projeto{form.type === "DONATION" ? " (opcional)" : ""}
+            Projeto (opcional)
             <select
-              required={form.type === "EXPENSE"}
               disabled={busy}
               value={form.projectId}
               onChange={(e) => set("projectId", e.target.value)}
             >
-              <option value="">
-                {form.type === "EXPENSE"
-                  ? "Selecione um projeto"
-                  : "Selecione um projeto (opcional)"}
-              </option>
+              <option value="">Sem projeto</option>
               {data.projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -397,6 +445,16 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
               <p className="section-description">
                 Marque quando o gasto foi por conta da equipe. Os vínculos abaixo são opcionais.
               </p>
+              {form.staffExpense && (
+                <label>
+                  Reembolsar a (se alguém adiantou o valor)
+                  <input
+                    maxLength={255}
+                    value={form.reimbursementTo}
+                    onChange={(e) => set("reimbursementTo", e.target.value)}
+                  />
+                </label>
+              )}
               <details>
                 <summary>Vincular equipe e participantes</summary>
                 {[
@@ -478,7 +536,9 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
             />
           </label>
           <label>
-            Data
+            {form.type !== "EXPENSE" && !form.expected
+              ? "Data do recebimento"
+              : "Data do lançamento"}
             <input
               type="date"
               required
@@ -486,6 +546,45 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
               onChange={(e) => set("date", e.target.value)}
             />
           </label>
+          {form.type === "EXPENSE" || form.expected ? (
+            <>
+              <label>
+                Vencimento
+                <input
+                  required
+                  type="date"
+                  value={form.dueDate}
+                  onChange={(e) => set("dueDate", e.target.value)}
+                />
+              </label>
+              <label>
+                Frequência
+                <select value={form.schedule} onChange={(e) => set("schedule", e.target.value)}>
+                  <option value="ONCE">Lançamento único</option>
+                  <option value="INSTALLMENTS">Dividir o valor em parcelas mensais</option>
+                  <option value="REPEAT">Repetir o valor a cada mês</option>
+                </select>
+              </label>
+              {form.schedule !== "ONCE" && (
+                <label>
+                  Quantidade de meses
+                  <input
+                    type="number"
+                    required
+                    min="2"
+                    max="60"
+                    value={form.occurrences}
+                    onChange={(e) => set("occurrences", e.target.value)}
+                  />
+                  <small>
+                    O vencimento acima será o primeiro. Os anexos ficam no primeiro lançamento.
+                  </small>
+                </label>
+              )}
+            </>
+          ) : (
+            <MovementFields account={form.accountName} method={form.method} set={set} />
+          )}
           <label>
             Anexos (PDF, PNG ou JPG)
             <input
@@ -538,11 +637,17 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
           <button disabled={busy}>{busy ? "Registrando…" : "Registrar"}</button>
         </form>
       </FormModal>
-      <section className="panel" hidden={viewSection !== "ledger"}>
-        <h2>Lançamentos</h2>
+      <section className="panel" hidden={viewSection !== "ledger" && !queue}>
+        <h2>
+          {queue
+            ? viewSection === "payables"
+              ? "Contas a pagar"
+              : "Contas a receber"
+            : "Lançamentos"}
+        </h2>
         <div className="ledger-actions">
           <label>
-            Data inicial
+            {queue ? "Vencimento inicial" : "Data inicial"}
             <input
               type="date"
               value={from}
@@ -551,7 +656,7 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
             />
           </label>
           <label>
-            Data final
+            {queue ? "Vencimento final" : "Data final"}
             <input
               type="date"
               value={until}
@@ -559,25 +664,37 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
               onChange={(e) => setUntil(e.target.value)}
             />
           </label>
-          <fieldset className="ledger-type-filter">
-            <legend>Tipo de lançamento</legend>
-            {[
-              ["EXPENSE", "Despesa"],
-              ["DONATION", "Doação"],
-            ].map(([key, label]) => (
-              <label key={key}>
-                <input
-                  type="checkbox"
-                  checked={selectedTypes[key]}
-                  disabled={
-                    selectedTypes[key] && Object.values(selectedTypes).filter(Boolean).length === 1
-                  }
-                  onChange={() => toggleType(key)}
-                />
-                {label}
-              </label>
-            ))}
-          </fieldset>
+          {queue ? (
+            <label>
+              <input
+                type="checkbox"
+                checked={onlyOverdue}
+                onChange={(e) => setOnlyOverdue(e.target.checked)}
+              />{" "}
+              Somente vencidas
+            </label>
+          ) : (
+            <fieldset className="ledger-type-filter">
+              <legend>Tipo de lançamento</legend>
+              {[
+                ["EXPENSE", "Despesa"],
+                ["DONATION", "Receitas"],
+              ].map(([key, label]) => (
+                <label key={key}>
+                  <input
+                    type="checkbox"
+                    checked={selectedTypes[key]}
+                    disabled={
+                      selectedTypes[key] &&
+                      Object.values(selectedTypes).filter(Boolean).length === 1
+                    }
+                    onChange={() => toggleType(key)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
+          )}
           <button
             className="secondary"
             onClick={() => setExportOpen(true)}
@@ -589,6 +706,7 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
             className="secondary"
             onClick={() => {
               setFilters({});
+              setOnlyOverdue(false);
               setFrom("");
               setUntil("");
               setSelectedTypes({ EXPENSE: true, DONATION: true });
@@ -649,7 +767,14 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
           <table>
             <thead>
               <tr>
-                {["Data", "Tipo", "Descrição", "Projeto", "Valor", "Situação"].map((h) => (
+                {[
+                  queue ? "Vencimento" : "Data",
+                  "Tipo",
+                  "Descrição",
+                  "Projeto",
+                  queue ? "Em aberto" : "Valor",
+                  "Situação",
+                ].map((h) => (
                   <th key={h} scope="col">
                     {h}
                   </th>
@@ -659,7 +784,7 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
             <tbody>
               {pageRows.map((r) => (
                 <tr key={r.type + r.id} className="ledger-clickable" onClick={() => setDetail(r)}>
-                  <td data-label="Data">{day(r.date)}</td>
+                  <td data-label={queue ? "Vencimento" : "Data"}>{day(listDate(r))}</td>
                   <td data-label="Tipo">{types[r.type]}</td>
                   <td data-label="Descrição">
                     <button
@@ -678,8 +803,13 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
                     )}
                   </td>
                   <td data-label="Projeto">{r.project || "—"}</td>
-                  <td data-label="Valor">{money(r.amount)}</td>
-                  <td data-label="Situação">{statuses[r.status]}</td>
+                  <td data-label={queue ? "Em aberto" : "Valor"}>
+                    {money(queue ? r.openAmount : r.amount)}
+                  </td>
+                  <td data-label="Situação">
+                    {statuses[r.status]}
+                    {r.overdue && <small className="table-caption">Vencida</small>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -750,10 +880,17 @@ export function FinanceView({ data, api, refresh, section = "summary", setPage, 
         <Detail
           row={detail}
           close={() => setDetail(null)}
-          decide={async (r, action) => {
-            await api("expenses/" + r.id + "/" + action, "POST", {});
-            await load();
-            await refresh();
+          canManage={canManage}
+          api={api}
+          onSaved={async () => {
+            setDetail(null);
+            setNotice("Lançamento atualizado.");
+            try {
+              await load();
+              await refresh();
+            } catch {
+              setError("Alteração salva. Atualize a página para consultar o saldo.");
+            }
           }}
         />
       )}

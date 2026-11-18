@@ -13,7 +13,7 @@ import java.time.LocalDate;
     isGetterVisibility = com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility.NONE
 )
 @Entity
-public class Expense {
+public class Expense extends FinancialEntry {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

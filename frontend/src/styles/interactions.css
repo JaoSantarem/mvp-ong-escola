@@ -271,3 +271,8 @@
 .demo-signin:hover {
   background: #ffffff12;
 }
+
+.summary-period .summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+}

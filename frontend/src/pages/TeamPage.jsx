@@ -43,10 +43,12 @@ function AreaCheckboxes({ day, management, onChange, disabled = false, name = "n
 }
 export function Team({ api, profile, doAction, section = "instructors", setPage }) {
   const [editing, setEditing] = useState(null);
+  const [active, setActive] = useState(true);
   const [photoFile, setPhotoFile] = useState(null);
   const [formError, setFormError] = useState("");
   function openInstructor(person = null) {
     setEditing(person);
+    setActive(person?.active !== false);
     setName(person?.name || "");
     setArea(person?.area || "");
     setContact(person?.contact || "");
@@ -116,7 +118,7 @@ export function Team({ api, profile, doAction, section = "instructors", setPage 
       const record = await api(
         editing ? "instructors/" + editing.id : "instructors",
         editing ? "PUT" : "POST",
-        { name, area, contact },
+        { name, area, contact, active },
       );
       setEditing(record);
       await uploadProfilePhoto("INSTRUCTOR", record.id, photoFile);
@@ -340,7 +342,10 @@ export function Team({ api, profile, doAction, section = "instructors", setPage 
                       <td data-label="Foto">
                         <PersonPhoto photo={avatars[i.id]} name={i.name} />
                       </td>
-                      <td data-label="Nome">{i.name}</td>
+                      <td data-label="Nome">
+                        {i.name}
+                        {i.active === false && <small className="table-caption">Inativo</small>}
+                      </td>
                       <td data-label="Área de atuação">{i.area || "—"}</td>
                       <td data-label="Contato">{i.contact || "—"}</td>
                       <td data-label="Ações">
@@ -444,6 +449,16 @@ export function Team({ api, profile, doAction, section = "instructors", setPage 
                 onChange={(e) => setContact(maskPhone(e.target.value))}
               />
             </label>
+            {editing && (
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={active}
+                  onChange={(e) => setActive(e.target.checked)}
+                />
+                Ativo para novas oficinas
+              </label>
+            )}
             <button disabled={busy}>
               {busy ? "Salvando…" : editing ? "Salvar alterações" : "Cadastrar instrutor"}
             </button>
