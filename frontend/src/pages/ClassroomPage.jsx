@@ -333,7 +333,7 @@ export function Classroom({ api, data, doAction, setPage, workshopId, profile, r
         </Form>
       </FormModal>
       <div hidden={section !== "meetings"}>
-        <MeetingCalendar meetings={meetings} onOpen={choose} />
+        <MeetingCalendar meetings={meetings} onOpen={openMeeting} />
       </div>
       {deleteNotice && (
         <p className="success-notice" role="status">
@@ -443,7 +443,7 @@ export function Classroom({ api, data, doAction, setPage, workshopId, profile, r
           </div>
           <div hidden={meetingView !== "student"}>
             <h3>Adicionar aluno ao encontro</h3>
-            <p>setAssignments inclusão será confirmada ao salvar a chamada.</p>
+            <p>A inclusão será confirmada ao salvar a chamada.</p>
             <button type="button" className="link" onClick={() => setMeetingView("attendance")}>
               ← Voltar à chamada
             </button>
